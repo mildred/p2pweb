@@ -12,7 +12,13 @@ var websock = new sockets.server();
 var seeds = [];
 
 websock.connect('/ws/p2pwebseeds', function(request, socket){
-  var seedaddr = [request.socket.remoteAddress, request.socket.remotePort];
+  var seedaddr;
+  if(request.httpRequest.headers['x-forwarded-for']) {
+    seedaddr = [request.httpRequest.headers['x-forwarded-for'], request.socket.remotePort];
+    console.log(request.httpRequest.headers);
+  } else {
+    seedaddr = [request.socket.remoteAddress, request.socket.remotePort];
+  }
   var seedaddr_s = JSON.stringify(seedaddr);
   seeds.push(seedaddr);
   socket.send(JSON.stringify(seeds));
