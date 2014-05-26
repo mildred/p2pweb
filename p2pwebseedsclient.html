@@ -1,0 +1,89 @@
+Welcome to P2P Web
+<!--
+<script src="/ws/socket.io.js"></script>
+<script>
+  var socket = io.connect('http://localhost', {resource: 'ws'});
+  socket.on('news', function (data) {
+    console.log(data);
+    socket.emit('my other event', { my: 'data' });
+  });
+</script>
+-->
+
+Address: <input id="address" type="text" value="ws://localhost:1338/ws/p2pwebseeds" size="100"/>
+<br />
+Status: <input id="status" type="text" value="" size="100" disabled/>
+<br />
+Message: <input id="message" type="text" value="" size="100"/>
+<br />
+<input id="encodejson" type="checkbox" checked/> Encode to JSON
+<hr />
+<input id="connect" type="button" value="connect" />
+<input id="send" type="button" value="send" />
+<input id="close" type="button" value="close" />
+
+<script>
+
+// let's invite Firefox to the party.
+if (window.MozWebSocket) {
+  window.WebSocket = window.MozWebSocket;
+}
+
+var address    = document.getElementById("address");
+var status     = document.getElementById("status");
+var message    = document.getElementById("message");
+var encodejson = document.getElementById("encodejson");
+var connect    = document.getElementById("connect");
+var send       = document.getElementById("send");
+var close      = document.getElementById("close");
+
+var sock;
+
+connect.onclick = function(){
+  var addr = address.value;
+  console.log("Connecting to " + addr + "...");
+  status.value = "Connecting to " + addr + "...";
+  sock = new WebSocket(addr);
+  
+  send.onclick = function(){
+    status.value = "Send message to " + addr;
+    console.log("Send message to " + addr);
+    var msg = message.value
+    if(encodejson.checked) msg = JSON.stringify(msg);
+    console.log(msg);
+    sock.send(msg);
+  }
+  
+  close.onclick = function(){
+    sock.close();
+  }
+  
+  sock.onopen = function(){
+    status.value = "Connected to " + addr;
+    console.log("Connected to " + addr);
+  }
+  
+  sock.onclose = function(event){
+    status.value = "Closed connection to " + addr;
+    console.log("Closed connection to " + addr);
+    console.log(event);
+  }
+  
+  sock.onerror = function(event){
+    status.value = "Error from " + addr;
+    console.log("Error from " + addr);
+    console.log(event);
+  }
+  
+  sock.onmessage = function(event){
+    status.value = "Received message from " + addr;
+    message.value = event.data;
+    console.log("Received:");
+    console.log(event);
+    if(encodejson.checked) console.log(JSON.parse(event.data));
+    else                   console.log(event.data);
+  }  
+};
+
+</script>
+

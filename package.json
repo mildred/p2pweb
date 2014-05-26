@@ -1,0 +1,17 @@
+{
+  "name": "p2pweb",
+  "description": "Peer to Peer web",
+  "dependencies" : {
+    "express": "*",
+    "websocket": "*",
+    "kademlia-dht": "*",
+    "vs-stun": "git://github.com/mildred/vs-stun.git",
+    "stun": "*",
+    "stunsrv": "*",
+    "freeice": "*",
+    "sock": "git://github.com/mildred/sock.git"
+  },
+  "engines": {
+    "node": "0.10.x"
+  }
+}

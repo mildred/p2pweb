@@ -1,0 +1,44 @@
+Welcome to P2P Web
+<!--
+<script src="/ws/socket.io.js"></script>
+<script>
+  var socket = io.connect('http://localhost', {resource: 'ws'});
+  socket.on('news', function (data) {
+    console.log(data);
+    socket.emit('my other event', { my: 'data' });
+  });
+</script>
+-->
+
+<script>
+// let's invite Firefox to the party.
+if (window.MozWebSocket) {
+  window.WebSocket = window.MozWebSocket;
+}
+
+var sock = new WebSocket('ws://localhost:1337/ws/control');    
+
+sock.onopen = function () {
+  console.log("opened");
+
+  sock.send(JSON.stringify("test from client"));
+};
+
+sock.onmessage = function (event) {
+  console.log("message:");
+  console.log(event.data);
+};
+
+sock.onclose = function (event) {
+  console.log("closed");
+};
+
+sock.onerror = function (event) {
+  console.log("error");
+  console.log(event);
+};
+
+console.log("sock");
+console.log(sock);
+
+</script>
