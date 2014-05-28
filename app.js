@@ -2,9 +2,11 @@
 var express = require('express');
 var sockets = require('./sockets');
 var storage = require('./storage');
+var kadwsrpc = require('./kadwsrpc');
 
 var app = express();
 var websock = new sockets.server();
+var kadrpc = new kadwsrpc();
 
 app.get('/', function(req, res){
   res.sendfile(__dirname + "/index.html");
@@ -28,10 +30,12 @@ websock.connect('/ws/kad', function(request, socket){
 });
 
 module.exports = {
+  kadrpc: kadrpc,
   app: app,
   websock: websock,
-  init: function() {
-    storage.addfile(__dirname + '/data');
+  init: function(datadir) {
+    datadir = datadir || (__dirname + '/data')
+    storage.addfile(datadir);
   }
 };
 

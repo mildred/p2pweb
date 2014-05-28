@@ -1,13 +1,19 @@
 var websocket = require('websocket');
 
+function tourl(endpoint){
+  return 'ws://' + endpoint[0] + ':' + endpoint[1] + '/ws/kad';
+}
+
 function KadWebSocketRpc() {
   this.handlers = {}
 }
 
 KadWebSocketRpc.prototype.websocket_receive = function(request, socket){
+  var self = this;
   socket.on('message', function(message) {
     var data = JSON.parse(message.utf8Data || message.binaryData);
-    var handler = this.handlers[data.type];
+    console.log("KadRpc: receive " + data.type);
+    var handler = self.handlers[data.type];
     if(handler) {
       try {
         socket.send(JSON.stringify(handler(data.data)));
@@ -21,18 +27,26 @@ KadWebSocketRpc.prototype.websocket_receive = function(request, socket){
 }
 
 KadWebSocketRpc.prototype.send = function(message, endpoint, payload, cb){
+  var url = tourl(endpoint);
+  console.log("KadRpc: send " + message + " to " + url);
   var client = new websocket.client({});
-  var socket = client.connect(endpoint, null);
   var replied = false;
-  socket.send(JSON.stringify({type: message, data: payload}));
-  socket.on('message', function(msg){
-    var data = JSON.parse(message.utf8Data || message.binaryData);
-    cb(null, data);
-    replied = true;
+
+  client.on('connect', function(conn){
+    conn.on('message', function(msg){
+      var data = JSON.parse(message.utf8Data || message.binaryData);
+      cb(null, data);
+      replied = true;
+    });
+
+    conn.on('close', function(reasonCode, description){
+      if(!replied) cb("Did not received a reply from " + url, null);
+    });
+
+    conn.send(JSON.stringify({type: message, data: payload}));
   });
-  socket.on('close', function(reasonCode, description){
-    if(!replied) cb("Did not received a reply from " + endpoint, null);
-  });
+  
+  client.connect(url, null);
 };
 
 KadWebSocketRpc.prototype.ping = function(addr, data, cb) { return this.send('ping', addr, data, cb); }

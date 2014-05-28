@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-var port =  process.env.PORT || parseInt(process.argv[2]) || 80;
+var port =  process.env.PORT || parseInt(process.argv[2]) || 81;
 
 var http    = require('http');
 var express = require('express');
@@ -20,14 +20,22 @@ websock.connect('/ws/p2pwebseeds', function(request, socket){
     seedaddr = [request.socket.remoteAddress, request.socket.remotePort];
   }
   var seedaddr_s = JSON.stringify(seedaddr);
-  seeds.push(seedaddr);
-  socket.send(JSON.stringify(seeds));
-  console.log("+ " + seedaddr_s);
 
+  var sendSeeds = function() {
+    socket.send(JSON.stringify({
+      seeds: seeds,
+      address: seedaddr
+    }));
+  }
+
+  seeds.push(seedaddr);
+  sendSeeds();
+  console.log("+ " + seedaddr_s);
+  
   socket.on('message', function(message) {
     //var data = JSON.parse(message.utf8Data || message.binaryData);
     //console.log(data);
-    socket.send(JSON.stringify(seeds));
+    sendSeeds();
   });
 
   socket.on('close', function(reasonCode, description){
@@ -45,6 +53,7 @@ var server = http.Server(app);
 websock.listen(server);
 server.listen(port, function(){
   console.log('* Server running at http://localhost:' + port + '/');
+  console.log('* Seeds at ws://localhost:' + port + '/ws/p2pwebseeds');
 });
 
 

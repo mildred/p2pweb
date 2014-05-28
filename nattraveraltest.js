@@ -24,10 +24,10 @@ tcp.on('refresh', function(data){
 
 });
 
-//tcp.start("stun.stunprotocol.org");
+tcp.start("stun.stunprotocol.org");
 //tcp.start("stunserver.org");
 //tcp.start('provserver.televolution.net');
 //tcp.start('stun.ipshka.com');
-tcp.start("perrin.mildred.fr");
+//tcp.start("perrin.mildred.fr");
 
 

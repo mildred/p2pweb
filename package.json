@@ -3,7 +3,7 @@
   "description": "Peer to Peer web",
   "dependencies" : {
     "express": "*",
-    "websocket": "*",
+    "websocket": "git://github.com/mildred/WebSocket-Node.git",
     "kademlia-dht": "*",
     "vs-stun": "git://github.com/mildred/vs-stun.git",
     "stun": "*",
