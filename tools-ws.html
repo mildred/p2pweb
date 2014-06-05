@@ -1,0 +1,71 @@
+<h1>WebSockets Tools</h1>
+
+<script>
+// let's invite Firefox to the party.
+if (window.MozWebSocket) {
+  window.WebSocket = window.MozWebSocket;
+}
+
+function ControlSock(opts){
+  this.opts = opts || {}
+  this.seq  = 0;
+  this.idprefix = 'c';
+  this.handlers = {};
+  this.onmessage = function(){};
+  this.onconnect = function(){};
+  this.onclose = function(){};
+  this.onerror = function(ev){ console.log(ev); };
+};
+
+ControlSock.prototype.connect = function(url){
+  var sock = new WebSocket(url);
+  var self = this;
+  this.sock = sock;
+  
+  sock.onopen = function (event) {
+    self.onconnect.call(self, [event]);
+  };
+
+  sock.onmessage = function (event) {
+    var i = event.data.indexOf(' ');
+    var id = event.data.substring(0, i);
+    var msg = event.data.substring(i+1);
+    
+    var reply = function(rep, callback){
+      if(callback) self.handlers[id] = callback;
+      self.sock.send(id + ' ' + reply);
+    };
+    
+    if(self.handlers[id]) {
+      self.handlers[id](msg, {
+        id: id,
+        reply: reply
+      });
+    } else {
+      self.onmessage.call(self, [msg, {
+        id: id,
+        reply: reply
+      }]);
+    }
+  };
+
+  sock.onclose = function (event) {
+    self.onclose.call(self, [event]);
+  };
+
+  sock.onerror = function (event) {
+    self.onerror.call(self, [event]);
+  };
+  
+};
+
+ControlSock.prototype.send = function(message, callback){
+  var id = this.idprefix + (++this.seq);
+  this.handlers[id] = callback;
+  this.sock.send(id + ' ' + message);
+}
+
+var sock = new ControlSock();
+sock.connect('ws://' + window.location.host + '/ws/control');
+
+</script>

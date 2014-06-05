@@ -3,13 +3,17 @@
   "description": "Peer to Peer web",
   "dependencies" : {
     "express": "*",
+    "tmp": "*",
     "websocket": "git://github.com/mildred/WebSocket-Node.git",
-    "kademlia-dht": "*",
+    "jssha": "git://github.com/Caligatio/jsSHA.git",
     "vs-stun": "git://github.com/mildred/vs-stun.git",
     "stun": "*",
     "stunsrv": "*",
     "freeice": "*",
-    "sock": "git://github.com/mildred/sock.git"
+    "weld": "*",
+    "tinymce": "*",
+    "jsencrypt": "git://github.com/travist/jsencrypt.git",
+    "kademlia-dht": "git://github.com/mildred/kademlia-dht.git"
   },
   "engines": {
     "node": "0.10.x"

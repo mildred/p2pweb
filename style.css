@@ -1,0 +1,27 @@
+textarea.rich {
+  width: 100%;
+  height: 10em;
+}
+.left {
+  text-align: left;
+}
+.center {
+  text-align: center;
+}
+.right {
+  text-align: right;
+}
+.justify {
+  text-align: justify;
+}
+input {
+  font: inherit;
+}
+input[type=text], input[type=date] {
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.mce-btn-group button {
+  height: 24px;
+}

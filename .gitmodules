@@ -1,0 +1,9 @@
+[submodule "js/filesaver"]
+	path = js/filesaver
+	url = https://github.com/eligrey/FileSaver.js.git
+[submodule "js/blob"]
+	path = js/blob
+	url = https://github.com/eligrey/Blob.js.git
+[submodule "js/jsrsasign"]
+	path = js/jsrsasign
+	url = https://github.com/kjur/jsrsasign.git

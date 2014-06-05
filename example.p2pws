@@ -1,0 +1,41 @@
+Format: P2P Website
+PublicKey:: <base64 encoded public key>
+Algorithm: RSA
+RSA-Length: 4096
+Signature:: <base64 encoded signature of everything before this line>
+
+Version: 1
+Index: {
+    "/": {
+      "Content-Type": "text/html; encoding=utf-8",
+      "filehash": "<hash of the content of this file>"
+    },
+    "/index.html": {
+      "Content-Type": "text/html; encoding=utf-8",
+      "filehash": "<hash of the content of this file>"
+    }
+  }
+Refresh: <number of seconds between each refresh to search for a new version>
+Signature:: <base64 encoded signature of everything before this line>
+
+
+
+============
+
+new lines are ignored
+
+PublicKey header cannot be redefined (other definitions are ignored)
+Signature header separate different sections
+Only signed headers are considered, and only if the signature is good
+Line continuation is "\n " or "\n\t"
+
+
+Private Key format .p2pwk
+=========================
+
+Format: P2P Website Private Key
+PrivateKey:: <base64 encoded public key>
+PublicKey:: <base64 encoded public key>
+Algorithm: RSA
+RSA-Length: 4096
+
