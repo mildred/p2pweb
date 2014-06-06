@@ -1,9 +1,10 @@
-window.KeyGen = function(ui, keylen){
-  var crypt = this.crypt = new JSEncrypt({default_key_size: keylen || 4096});
-  var self = this;
+require(['./jsencrypt/jsencrypt.min.js', './blob/Blob', './filesaver/FileSaver'], function(_, _, saveAs){
+//require('./jsencrypt/jsencrypt.min.js');
 
-  window.addEventListener('load', function(){
-  
+  module.exports = function KeyGen(ui, keylen){
+    var crypt = this.crypt = new JSEncrypt({default_key_size: keylen || 4096});
+    var self = this;
+
     var privkeysection = ui || document.querySelector(".privkey");
     var btn_generate   = privkeysection.querySelector("button.btn-generate");
     var btn_open       = privkeysection.querySelector("button.btn-open");
@@ -65,6 +66,7 @@ window.KeyGen = function(ui, keylen){
           btn_save.disabled = false;
           self.has_key = true;
           if(self.onkey) self.onkey(crypt);
+          else console.log(self);
         } else {
           label.textContent = 'Failed to load private key';
           alert("Could not load private key");
@@ -87,5 +89,6 @@ window.KeyGen = function(ui, keylen){
     btn_save.addEventListener('click', saveFile);
     file_opener.addEventListener('change', loadedFile);
 
-  });
-}
+  }
+
+});
