@@ -25,6 +25,12 @@
 
 'use strict';
 
+var RequireError = function(message, fileName, lineNumber) {
+	this.name = "RequireError";
+	this.message = message;
+}
+RequireError.prototype = Object.create(Error.prototype);
+
 // NOTE Global module paths
 var paths = window.Smoothie&&window.Smoothie.paths!==undefined?window.Smoothie.paths.slice(0):['./'];
 
@@ -220,7 +226,7 @@ function get_script(descriptor, cacheid, callback){
     if (request.readyState != 4)
       return;
     if (request.status != 200)
-      throw new SmoothieError('unable to load '+descriptor.id+" ("+request.status+" "+request.statusText+")");
+      throw new RequireError('unable to load '+descriptor.id+" ("+request.status+" "+request.statusText+")");
     if (locks[cacheid]) {
       console.warn("module locked: "+descriptor.id);
       callback && setTimeout(onLoad, 0);
