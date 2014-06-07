@@ -10,8 +10,13 @@
   
   <script type="text/javascript">
 
-    require(['js/keygen', 'js/sign', 'js/router', 'js/sha1hex'], function(KeyGen, sign, Router, sha1hex){
-
+    require(['js/keygen', 'js/sign', 'js/router', 'js/sha1hex', 'js/weld/lib/weld.js'], function(KeyGen, sign, Router, sha1hex, weld){
+    
+      //
+      // Local storage
+      //
+      
+      localStorage.P2PWS = localStorage.P2PWS || {};
       
       //
       // Communication with server
@@ -78,6 +83,36 @@
       // SignedHeader
       //
       
+      var siteList;
+      try {
+        siteList = JSON.parse(localStorage.getItem("P2PWS.siteList"));
+        console.log("get from localStorage");
+        console.log(siteList);
+        require.load(function(){
+          var data = [{
+            site_name: "a",
+            href: "#!/site/0"
+          },{
+            site_name: "b",
+            href: "#!/site/1"
+          }];
+          console.log(weld.weld(document.querySelector(".sitelist"), data, {
+            map: function(parent, element, key, val) { 
+              if(key == 'href')
+                element.setAttribute('href', val);
+              return true;
+            }
+          }));
+        });
+      } catch(e) {}
+      siteList = siteList || [];
+      
+      var saveSiteList = function(){
+        localStorage.setItem("P2PWS.siteList", JSON.stringify(siteList))
+        console.log("save to localStorage");
+        console.log(siteList);
+      }
+      
       var currentSite;
       
       var saveCurrentSite = function() {
@@ -99,13 +134,19 @@
     
       var r = new Router();
 
-      r["/site/new"] = function(){
+      r.on(/^\/site\/([0-9]+)$/, function(req){
+        document.querySelectorAll("section.showhide").hide();
+        var sitenum = parseInt(req[1]);
+        var site = siteList[sitenum]
+        if(!site) window.location = "#!/";
+        console.log(site);
+      });
+
+      r.on("/site/new", function(){
         document.querySelectorAll("section.showhide").hide();
         document.querySelectorAll("#section-new-website").show();
         document.querySelectorAll("#section-new-page").hide();
         var text = document.querySelector("textarea.p2pws");
-        
-        console.log(keygen);
         
         keygen.onkey = function(crypt){
           currentSite = new SignedHeader();
@@ -115,10 +156,13 @@
           saveCurrentSite();
           text.textContent = currentSite.text;
           console.log(currentSite);
+          siteList.push({site: currentSite.text, key: crypt.getPrivateKey()});
+          saveSiteList();
+          window.location = "#!/site/" + (siteList.length - 1);
         };
-      };
+      });
 
-      r["/site/page/new"] = function(){
+      r.on("/site/page/new", function(){
         if(!currentSite) window.location = "#!/site/new";
         document.querySelectorAll("section.showhide").hide();
         document.querySelectorAll("#section-new-website").show();
@@ -158,10 +202,15 @@
               alert("Error: could not save to the server.\n" + r.status + " " + r.statusText);
             } else {
               //console.log("PUT /obj/" + id + " ok");
+              window.location = "#!/site/new";
             }
           });
         });
-      };
+      });
+      
+      r.fallback(function(){
+        document.querySelectorAll("section.showhide").hide();
+      });
       
       r.run();
     });
@@ -175,6 +224,7 @@
       <li><a class="showhide" href="#section-shared-files">Shared Files</a></li>
       <li><a class="showhide" href="#section-published-websites">Published Websites</a></li>
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
+      <li class="sitelist"><a href="#!/site/new" name="site_name"></a></li>
     </ul>
   </nav>
   <section class="showhide" id="section-shared-files">

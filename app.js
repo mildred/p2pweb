@@ -37,6 +37,7 @@ app.use('/js',           express.static(__dirname + '/js'));
 app.use('/js/tinymce',   express.static(__dirname + '/node_modules/tinymce'));
 app.use('/js/jsencrypt', express.static(__dirname + '/node_modules/jsencrypt/bin'));
 app.use('/js/jssha',     express.static(__dirname + '/node_modules/jssha/src'));
+app.use('/js/weld',      express.static(__dirname + '/node_modules/weld'));
 app.get('/tools-ws.html', function(req, res){
   res.sendfile(__dirname + "/tools-ws.html");
 });

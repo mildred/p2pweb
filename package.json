@@ -3,6 +3,7 @@
   "description": "Peer to Peer web",
   "dependencies" : {
     "express": "*",
+    "pure": "*",
     "tmp": "*",
     "websocket": "git://github.com/mildred/WebSocket-Node.git",
     "jssha": "git://github.com/Caligatio/jsSHA.git",
