@@ -103,7 +103,7 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
         for(k in data) {
           if(!data[k].file_at) continue;
           var dest = data[k].file_at
-          res.setHeader("X-Available-Location", "http://" + dest[0] + ":" + dest[1] + "/obj/" + fid + path)
+          res.setHeader("X-Available-Location", "http://" + dest[0] + ":" + dest[1] + "/obj/" + fid + path + (opts.query_string || ""))
           availableDestinations[k] = dest;
         }
         var destination = randomValue(availableDestinations);
@@ -113,11 +113,11 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
           proxyFile(res, {
             host:   destination[0],
             port:   destination[1],
-            path:   "/obj/" + fid + path,
+            path:   "/obj/" + fid + path + (opts.query_string || ""),
             method: 'GET'
           });
         } else {
-          res.setHeader("Location", "http://" + destination[0] + ":" + destination[1] + "/obj/" + fid + path);
+          res.setHeader("Location", "http://" + destination[0] + ":" + destination[1] + "/obj/" + fid + path + (opts.query_string || ""));
           res.writeHead(302, "Found");
           res.end();
         }
@@ -126,20 +126,24 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
   }
 };
 
-var serveFile = function(fid, res, headers, opts){
+var serveFile = function(fid, res, query, opts){
+  opts = opts || {}
   var file = storage.filelist[fid];
   if(file) {
     var heads = {};
     for(h in file.metadata.headers) {
       heads[h] = file.metadata.headers[h];
     }
-    if(headers) {
-      for(h in headers) {
-        heads[h] = headers[h];
+    if(opts.headers) {
+      for(h in opts.headers) {
+        heads[h] = opts.headers[h];
       }
     }
     for(h in heads) {
       res.setHeader(h, heads[h]);
+    }
+    if(query['content-type']) {
+      res.setHeader('Content-Type', query['content-type']);
     }
     res.sendfile(file.path);
   } else {
@@ -147,36 +151,36 @@ var serveFile = function(fid, res, headers, opts){
   }  
 };
 
-app.get(/^\/obj\/([a-fA-F0-9]*)$/, function(req, res){
-  var fid = req.params[0].toLowerCase();
-  serveFile(fid, res);
-});
-
-app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)$/, function(req, res){
+app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)?$/, function(req, res){
+  var query_string = (/^[^\?]*(\?.*)$/.exec(req.url) || [])[1];
   var fid = req.params[0].toLowerCase();
   var ver = req.params[2] || "";
   var flags = req.params[3] || "" // Should not contain A-F a-f
   var proxy = flags.indexOf("P") != -1;
   var path  = req.params[4];
-  var cap = /\/~([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(\/.*)$/.exec(path);
+  var cap = /\/~([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(\/.*)?$/.exec(path);
   if(cap) {
     if(cap[1] && cap[1].length > 0) {
       fid = cap[1].toLowerCase();
+      ver = "";
     }
     if(cap[3] && cap[3].length > 0) {
       ver = cap[3];
     }
-    path = cap[4];
+    path = cap[4] || "";
     var newFlags = (proxy ? "P" : "");
     if(ver.length      > 0) ver      = "," + ver;
     if(newFlags.length > 0) newFlags = "," + newFlags;
-    res.setHeader("Location", "/obj/" + fid + ver + newFlags + path);
+    res.setHeader("Location", "/obj/" + fid + ver + newFlags + path + query_string);
     res.writeHead(302, "Found");
     res.end();
     return;
   }
   var file = storage.filelist[fid];
   if(file) {
+    if(!path) {
+      return serveFile(fid, res, req.query, {query_string: query_string});
+    }
     fs.readFile(file.path, function (err, data) {
       if(err) {
         res.setHeader("Content-Type", "text/plain");
@@ -199,7 +203,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)$/, function(req,
       var f = h.getFile(path, isFinite(ver) ? ver : undefined);
       if(f) {
         res.setHeader("P2PWS-Blob-Id", f.id);
-        serveFile(f.id, res, f.headers, {proxy: proxy});
+        serveFile(f.id, res, req.query, {headers: f.headers, proxy: proxy, query_string: query_string});
       } else {
         var ids = h.getSectionsIds(sha1sum);
         res.setHeader("Content-Type", "text/plain");
@@ -212,7 +216,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)$/, function(req,
       }
     });
   } else {
-    redirectObjectNotFound(fid, path, res, {proxy: proxy})
+    redirectObjectNotFound(fid, path || "", res, {proxy: proxy, query_string: query_string})
   }
 });
 
