@@ -1,5 +1,4 @@
 function Router(){
-  console.log(window);
   var self = this;
   this._routes = [];
   this._router = function(){

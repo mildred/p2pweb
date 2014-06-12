@@ -6,8 +6,9 @@
   //
   
   module.exports.sign = function(crypt) {
+    var key = (typeof crypt == "string") ? crypt : crypt.getPrivateKey();
     var rsa = new RSAKey();
-    rsa.readPrivateKeyFromPEMString(crypt.getPrivateKey());
+    rsa.readPrivateKeyFromPEMString(key);
     return function(text){
       //return crypt.sign(text, sha1hex);
       return rsa.signString(text, "sha1");

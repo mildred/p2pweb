@@ -107,9 +107,6 @@ function require(identifier, callback){
     }
     return modules;
   }
-  
-  var frame = cbstack.last_frame;
-  if(frame && callback) frame.on_require(identifier);
 
   var descriptor = resolve(identifier);
   var cacheid = '$'+descriptor.id;
@@ -118,6 +115,9 @@ function require(identifier, callback){
     if(callback) callback(cache[cacheid].exports);
     return cache[cacheid].exports;
   }
+  
+  var frame = cbstack.last_frame;
+  if(frame && callback) frame.on_require(identifier);
   
   debug(descriptor.uri + " loading");
   
@@ -135,23 +135,42 @@ function require(identifier, callback){
         debug(module.uri + " require to " + mod + " detected");
         this.num_requires++;
       },
+      on_wait: function(){
+        debug(module.uri + " wait detected");
+        this.num_requires++;
+        this.explicit_wait = true;
+      },
+      on_ready: function(){
+        this.num_requires = 0;
+        debug(module.uri + " notified ready, run callback");
+        callback.apply(cache[cacheid], [cache[cacheid].exports]);
+        if(this.parent) {
+          debug(module.uri + " ready, notify parents");
+          this.parent.on_load();
+        }
+        debug(module.uri + " callbacks completed");
+      },
       on_load: function(){
         debug(module.uri + " notified for callback");
         this.num_requires--;
         if(this.num_requires == 0) {
-          debug(module.uri + " ready, run callback");
-          callback.apply(cache[cacheid], [cache[cacheid].exports]);
-          if(this.parent) {
-            debug(module.uri + " ready, notify parents");
-            this.parent.on_load();
-          }
-          debug(module.uri + " callbacks completed");
+          this.on_ready();
         } else {
           debug(module.uri + " not ready, waiting for " + this.num_requires);
         }
       },
       parent: frame
     };
+    
+    module.wait = function(){
+      sub_frame.on_wait();
+      var ready = false;
+      return function(){
+        if(ready) return;
+        sub_frame.on_ready();
+        ready = true;
+      };
+    }
     
     if(!callback){
       var f = new Function('global', 'module', 'exports', source + '\n//# sourceURL='+module.uri);
@@ -228,7 +247,7 @@ function get_script(descriptor, cacheid, callback){
     if (request.status != 200)
       throw new RequireError('unable to load '+descriptor.id+" ("+request.status+" "+request.statusText+")");
     if (locks[cacheid]) {
-      console.warn("module locked: "+descriptor.id);
+      console.warn("require.js: module locked: "+descriptor.id);
       callback && setTimeout(onLoad, 0);
       return;
     }

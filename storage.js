@@ -77,7 +77,7 @@ var addfile = function(file) {
             h.checkHeaders();
             real_fid = h.getFirstId(sha1sum) || key;
             all_ids = h.getSectionsIds(sha1sum);
-            all_ids.push(key);
+            all_ids.push(all_ids.last);
             register_file(real_fid, file, all_ids, metadata);
           } else {
             register_file(key, file, [key], metadata);
