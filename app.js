@@ -38,6 +38,7 @@ app.get('/style.css', function(req, res){
 });
 app.use('/js',           express.static(__dirname + '/js'));
 app.use('/js/tinymce',   express.static(__dirname + '/node_modules/tinymce'));
+app.use('/js/tinymce/skins/p2pweb',   express.static(__dirname + '/tinymce-skin-p2pweb'));
 app.use('/js/jsencrypt', express.static(__dirname + '/node_modules/jsencrypt/bin'));
 app.use('/js/jssha',     express.static(__dirname + '/node_modules/jssha/src'));
 app.use('/js/pure',      express.static(__dirname + '/node_modules/pure/libs'));

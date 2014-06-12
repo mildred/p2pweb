@@ -111,6 +111,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     tinymce.remove(selector);
     tinymce.init({
       selector: selector,
+      skin: "p2pweb",
       content_css: "style.css",
       plugins: "save autolink autoresize code hr link fullpage media image paste table",
       browser_spellcheck : true,
