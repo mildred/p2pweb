@@ -7,6 +7,3 @@
 [submodule "js/jsrsasign"]
 	path = js/jsrsasign
 	url = https://github.com/kjur/jsrsasign.git
-[submodule "js/smoothie"]
-	path = js/smoothie
-	url = https://github.com/letorbi/smoothie
