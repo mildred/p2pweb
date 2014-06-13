@@ -224,11 +224,14 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     });
   };
   
+  var privateKeyStore = {}
+  
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
     var siteKey = site.getFirstId(sha1hex);
     var siteTitle = site.getLastHeader("Title");
     var pageArray = [];
+    if(!privateKey) privateKey = privateKeyStore[siteKey];
     for(path in pages) {
       pages[path].path = path;
       pageArray.push(pages[path]);
@@ -272,7 +275,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
           "Expected public key: " + publicKeyExpected + "\n" +
           "Provided public key: " + publicKey);
       }
-      privateKey = privateKey_;
+      privateKeyStore[siteKey] = privateKey = privateKey_;
       btn_save_pkey.disabled = false;
       btn_sign_rev.disabled  = false;
     });
@@ -301,6 +304,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   }
   
   function updateSitePageEditor(sitenum, site, existingContent){
+    var siteKey = site.getFirstId(sha1hex);
     existingContent = existingContent || {};
     parseMetaData(existingContent);
     var newpage = !existingContent.url;
@@ -387,7 +391,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
       setMeta(doc, 'dcterms.created', now.toISOString(), false);
       setMeta(doc, 'dcterms.date',    now.toISOString(), true);
-      setMeta(doc, 'p2pws.site.sha1',     site.getFirstId(sha1hex),      true);
+      setMeta(doc, 'p2pws.site.sha1',     siteKey, true);
       setMeta(doc, 'p2pws.site.revision', site.getLastUnsignedSection(), true);
       setMeta(doc, 'p2pws.page.path',     path, true);
       
@@ -429,11 +433,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
           alert("Error: could not save to the server.\n" + r.status + " " + r.statusText);
         } else {
           //console.log("PUT /obj/" + id + " ok");
-          if(oldPath != path) {
-            window.location = "#!/site/" + sitenum + "/page" + path;
-          } else {
-            updateSitePageEditor(sitenum, site, {url:path, body: doc});
-          }
+          window.router.go("#!/site/" + (sitenum || siteKey) + "/page" + path);
         }
       });
     }
@@ -505,32 +505,6 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   var r = new Router();
 
-  r.on(/^\/site\/([0-9a-fA-F]+)$/, function(req){
-    document.querySelectorAll("section.showhide").hide();
-    var siteKey = req[1].toLowerCase();
-    if(siteKey.length < 40) {
-      var sitenum = parseInt(req[1]);
-      var site = siteList[sitenum];
-      if(!site) window.router.go("#!/");
-      site.getSite(function(err, s){
-        if(err) {
-          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-          window.router.go("#!/");
-          return;
-        }
-        //console.log(site);
-        updateSite(sitenum, s, site.key);
-        document.querySelectorAll("#section-website-page").hide();
-      });
-    } else {
-      getSiteWithUI(siteKey, function(site){
-        if(!site) return r.go("#!/");
-        updateSite(null, site);
-        document.querySelectorAll("#section-website-page").hide();
-      });
-    }
-  });
-
   r.on("/site/new", function(){
     document.querySelectorAll("section.showhide").hide();
     var section = document.querySelector("section#section-new-website");
@@ -573,48 +547,102 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     }
   });
 
-  r.on(/^\/site\/([0-9]+)\/newpage$/, function(req){
+  r.on(/^\/site\/([0-9a-fA-F]+)$/, function(req){
     document.querySelectorAll("section.showhide").hide();
-    var sitenum = parseInt(req[1]);
-    var site = siteList[sitenum];
-    if(!site) window.router.go("#!/");
-    site.getSite(function(err, s){
-      if(err) {
-        alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.router.go("#!/");
-        return;
-      }
-      updateSite(sitenum, s, site.key);
-      updateSitePageEditor(sitenum, s);
-    });
-  });
-
-  r.on(/^\/site\/([0-9]+)\/page(\/.*)$/, function(req){
-    document.querySelectorAll("section.showhide").hide();
-    var sitenum = parseInt(req[1]);
-    var path = req[2];
-    var site = siteList[sitenum]; // FIXME
-    if(!site) window.router.go("#!/");
-    site.getSite(function(err, s){
-      if(err) {
-        alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.router.go("#!/");
-        return;
-      }
-      var pagemetadata = s.getFile(path);
-      updateSite(sitenum, s, site.key);
-      getBlobCache(pagemetadata.id, function(err, content){
-        if(err || !content) {
-          alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
+    var siteKey = req[1].toLowerCase();
+    if(siteKey.length < 40) {
+      var sitenum = parseInt(req[1]);
+      var site = siteList[sitenum];
+      if(!site) window.router.go("#!/");
+      site.getSite(function(err, s){
+        if(err) {
+          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
           window.router.go("#!/");
           return;
         }
-        updateSitePageEditor(sitenum, s, {
-          url:  path,
-          body: content
+        //console.log(site);
+        updateSite(sitenum, s, site.key);
+        document.querySelectorAll("#section-website-page").hide();
+      });
+    } else {
+      getSiteWithUI(siteKey, function(site){
+        if(!site) return r.go("#!/");
+        updateSite(null, site);
+        document.querySelectorAll("#section-website-page").hide();
+      });
+    }
+  });
+
+  r.on(/^\/site\/([0-9a-fA-F]+)\/newpage$/, function(req){
+    document.querySelectorAll("section.showhide").hide();
+    var siteKey = req[1].toLowerCase();
+    if(siteKey.length < 40) {
+      var sitenum = parseInt(req[1]);
+      var site = siteList[sitenum];
+      if(!site) r.go("#!/");
+      site.getSite(function(err, s){
+        if(err) {
+          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
+          r.go("#!/");
+          return;
+        }
+        updateSite(sitenum, s, site.key);
+        updateSitePageEditor(sitenum, s);
+      });
+    } else {
+      getSiteWithUI(siteKey, function(site){
+        if(!site) return r.go("#!/");
+        updateSite(null, site);
+        updateSitePageEditor(null, site);
+      });
+    }
+  });
+
+  r.on(/^\/site\/([0-9a-fA-F]+)\/page(\/.*)$/, function(req){
+    document.querySelectorAll("section.showhide").hide();
+    var siteKey = req[1].toLowerCase();
+    var path = req[2];
+    if(siteKey.length < 40) {
+      var sitenum = parseInt(req[1]);
+      var site = siteList[sitenum]; // FIXME
+      if(!site) window.router.go("#!/");
+      site.getSite(function(err, s){
+        if(err) {
+          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
+          window.router.go("#!/");
+          return;
+        }
+        var pagemetadata = s.getFile(path);
+        updateSite(sitenum, s, site.key);
+        getBlobCache(pagemetadata.id, function(err, content){
+          if(err || !content) {
+            alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
+            window.router.go("#!/");
+            return;
+          }
+          updateSitePageEditor(sitenum, s, {
+            url:  path,
+            body: content
+          });
         });
       });
-    });
+    } else {
+      getSiteWithUI(siteKey, function(site){
+        if(!site) return r.go("#!/");
+        var pagemetadata = site.getFile(path);
+        updateSite(null, site);
+        getBlobCache(pagemetadata.id, function(err, content){
+          if(err || !content) {
+            alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
+            return r.go("#!/");
+          }
+          updateSitePageEditor(null, site, {
+            url:  path,
+            body: content
+          });
+        });
+      });
+    }
   });
   
   r.fallback(function(){

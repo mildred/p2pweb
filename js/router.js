@@ -52,7 +52,9 @@ Router.prototype.run = function(){
 }
 
 Router.prototype.go = function(location) {
-  if(this._window.location == location) {
+  console.log("Router: go to " + location);
+  if(this._window.location.hash == location) {
+    console.log("Router: (run _router())");
     this._router();
   } else {
     this._window.location = location;

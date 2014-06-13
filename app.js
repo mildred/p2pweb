@@ -154,7 +154,7 @@ var serveFile = function(fid, res, query, opts){
 };
 
 app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(req, res){
-  var query_string = (/^[^\?]*(\?.*)$/.exec(req.url) || [])[1];
+  var query_string = (/^[^\?]*(\?.*)$/.exec(req.url) || [])[1] || "";
   var fid = req.params[0].toLowerCase();
   var ver = req.params[2] || "";
   var flags = req.params[3] || "" // Should not contain A-F a-f

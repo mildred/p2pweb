@@ -125,11 +125,11 @@ var create = function(fid, req, callback){
           h.checkHeaders();
           real_fid = h.getFirstId(sha1sum);
           all_ids = h.getSectionsIds(sha1sum);
-          all_ids.push(digest);
         }
 
         if(real_fid != fid) {
           fs.unlink(filename_temp, logerror);
+          console.log("400 Bad Request: Incorrect Identifier, expected " + real_fid + " instad of " + fid);
           callback(400, "Bad Request", "Incorrect Identifier, expected " + real_fid + " instad of " + fid);
           return;
         }
@@ -139,13 +139,14 @@ var create = function(fid, req, callback){
           var actual_ids = (filelist[real_fid] || {}).ids || [];
           for(var i = 0; i < actual_ids.length; i++) {
             var loose = true;
-            for(var j = 0; i < all_ids.length && loose; i++) {
+            for(var j = 0; j < all_ids.length && loose; j++) {
               if(actual_ids[i] == all_ids[j]) loose = false;
             }
             if(loose) would_loose.push("#" + i + ": " + actual_ids[i]);
           }
           
           if(would_loose.length > 0) {
+            console.log("400 Bad Request: P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
             callback(400, "Bad Request", "P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
             return;
           }
@@ -159,6 +160,7 @@ var create = function(fid, req, callback){
           var metadata = {
             headers: { "content-type": headers["content-type"] }
           };
+          if(all_ids.last) all_ids.push(all_ids.last);
           register_file(fid, filename, all_ids, metadata);
           callback(201, "Created", fid);
           fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
