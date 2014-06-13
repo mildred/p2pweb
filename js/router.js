@@ -1,8 +1,10 @@
-function Router(){
+function Router(win){
+  this._window = win || window;
+  this._window.router = this;
   var self = this;
   this._routes = [];
   this._router = function(){
-    var h = window.location.hash;
+    var h = self._window.location.hash;
     var c = /^\#\!(\/.*)$/.exec(h);
     if(c) {
       var p = c[1];
@@ -44,9 +46,17 @@ Router.prototype.fallback = function(callback){
 }
 
 Router.prototype.run = function(){
-  window.addEventListener('load',       this._router);
-  window.addEventListener('hashchange', this._router);
-  if(window.loaded) this._router();
+  this._window.addEventListener('load',       this._router);
+  this._window.addEventListener('hashchange', this._router);
+  if(this._window.loaded) this._router();
+}
+
+Router.prototype.go = function(location) {
+  if(this._window.location == location) {
+    this._router();
+  } else {
+    this._window.location = location;
+  };
 }
 
 module.exports = Router;

@@ -106,7 +106,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   // Rich text editor
   //
   
-  function initEditor(selector, onsave){
+  function initEditor(selector, onsave, oninit, onsetup){
     console.log('tinymce init: ' + selector);
     tinymce.remove(selector);
     tinymce.init({
@@ -117,7 +117,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       browser_spellcheck : true,
       
       // http://www.tinymce.com/wiki.php/Controls
-      toolbar: "save | undo redo | code | formatselect styleselect removeformat | bullist numlist | blockquote | link image media table hr",
+      toolbar: "save fullpage code | undo redo | formatselect styleselect removeformat | bullist numlist | blockquote | link image media table hr",
       menubar : false,
       
       target_list: false, // link
@@ -135,7 +135,10 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       },
     
       save_enablewhendirty: false,  
-      save_onsavecallback: onsave
+      save_onsavecallback: onsave,
+      
+      init_instance_callback: oninit,
+      setup: onsetup
     });
   };
   
@@ -253,6 +256,9 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       url:   existingContent.url   || "",
       body:  existingContent.body  || ""
     });
+    
+    console.log("Load: " + existingContent.body);
+
     var title  = document.querySelector("#section-website-page input[name=title]");
     var link   = document.querySelector("#section-website-page input[name=url]");
     var ctime  = document.querySelector("#section-website-page input[name=ctime]");
@@ -264,7 +270,26 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     for(var i = 0; i < inputs.length; i++) {
       inputs[i].addEventListener('input', updateInputSize);
     }
-    initEditor("#section-website-page textarea.rich", saveDocument);
+
+    initEditor("#section-website-page textarea.rich", saveDocument, function(editor){
+      title.addEventListener('input', saveTitle);
+      var doc = editor.getDoc();
+      var doc_title = doc.querySelector("head > title");
+      if(!doc_title) {
+        console.log("create title element");
+        console.log(doc.firstElementChild.outerHTML);
+        doc_title = doc.createElement("title");
+        doc.querySelector("head").appendChild(doc_title);
+      }
+      
+      title.value = doc_title.textContent;
+    
+      function saveTitle(){
+        var doc = editor.getDoc();
+        console.log(this.value);
+        doc.querySelector("head > title").textContent = this.value;
+      }
+    });
     
     function saveDocument(document){
       var doc = document.getContent();
@@ -279,6 +304,8 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       saveSiteList(siteList);
       updateMenu();
       updateSite(sitenum, site);
+
+      console.log("Save: " + doc);
 
       sendBlob(doc, docid, "text/html; charset=utf-8", function(r, id){
         if(r) {
@@ -354,11 +381,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     document.querySelectorAll("section.showhide").hide();
     var sitenum = parseInt(req[1]);
     var site = siteList[sitenum];
-    if(!site) window.location = "#!/";
+    if(!site) window.router.go("#!/");
     site.getSite(function(err, s){
       if(err) {
         alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.location = "#!/";
+        window.router.go("#!/");
         return;
       }
       //console.log(site);
@@ -369,7 +396,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
 
   r.on("/site/new", function(){
     document.querySelectorAll("section.showhide").hide();
-    var text = document.querySelector("textarea.p2pws");
+    document.querySelectorAll("section#section-new-website").show();
     
     keygen.onkey = function(crypt){
       currentSite = new SignedHeader();
@@ -377,12 +404,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       currentSite.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       currentSite.addSignature(sign.sign(crypt));
       saveSite(currentSite);
-      text.textContent = currentSite.text;
       console.log(currentSite);
       var i = addSiteToList(siteList, currentSite, crypt.getPrivateKey(), false);
       saveSiteList(siteList);
       updateMenu();
-      window.location = "#!/site/" + i;
+      window.router.go("#!/site/" + i);
     };
   });
 
@@ -390,11 +416,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     document.querySelectorAll("section.showhide").hide();
     var sitenum = parseInt(req[1]);
     var site = siteList[sitenum];
-    if(!site) window.location = "#!/";
+    if(!site) window.router.go("#!/");
     site.getSite(function(err, s){
       if(err) {
         alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.location = "#!/";
+        window.router.go("#!/");
         return;
       }
       updateSite(sitenum, s, site.key);
@@ -407,11 +433,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     var sitenum = parseInt(req[1]);
     var path = req[2];
     var site = siteList[sitenum]; // FIXME
-    if(!site) window.location = "#!/";
+    if(!site) window.router.go("#!/");
     site.getSite(function(err, s){
       if(err) {
         alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.location = "#!/";
+        window.router.go("#!/");
         return;
       }
       var pagemetadata = s.getFile(path);
@@ -419,7 +445,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       getBlobCache(pagemetadata.id, function(err, content){
         if(err || !content) {
           alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
-          window.location = "#!/";
+          window.router.go("#!/");
           return;
         }
         updateSitePageEditor(sitenum, s, {

@@ -159,9 +159,11 @@ SignedHeader.prototype.addHeader = function (name, value) {
   });
 }
 
-SignedHeader.prototype.addSignature = function (signfunction) {
+SignedHeader.prototype.addSignature = function (signfunction, addDate) {
   var h = this.getLastHeader();
+  addDate = addDate === undefined ? true : !!addDate;
   if(h.name == "Signature") return false;
+  if(addDate) this.addHeader("Date", (new Date()).toISOString());
   this.addHeader("Signature", signfunction(this.text));
   return true;
 }
