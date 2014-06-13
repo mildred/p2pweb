@@ -474,20 +474,44 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
 
   r.on("/site/new", function(){
     document.querySelectorAll("section.showhide").hide();
-    document.querySelectorAll("section#section-new-website").show();
+    var section = document.querySelector("section#section-other-website");
+    section.show();
+    var website_id = section.querySelector(".website input");
+    var btn_gen_id = section.querySelector(".website .btn-generate");
+    var btn_ok     = section.querySelector(".btn-ok");
     
-    keygen.onkey = function(crypt){
+    btn_gen_id.disabled = true;
+    btn_ok.disabled = true;
+    
+    keygen.onkey = KeyAvailable;
+    btn_ok.addEventListener('click', Finish);
+    btn_gen_id.addEventListener('click', SiteIdAvailable);
+    
+    var crypt;
+    function KeyAvailable(crypt_){
+      crypt = crypt_;
+      btn_gen_id.disabled = false;
+    }
+    
+    var currentSite;
+    var currentSiteIndex;
+    function SiteIdAvailable(){
       currentSite = new SignedHeader();
       currentSite.addHeader("Format", "P2P Website");
       currentSite.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       currentSite.addSignature(sign.sign(crypt));
+      website_id.value = currentSite.getFirstId(sha1hex);
       saveSite(currentSite);
       console.log(currentSite);
-      var i = addSiteToList(siteList, currentSite, crypt.getPrivateKey(), false);
+      var i = currentSiteIndex = addSiteToList(siteList, currentSite, crypt.getPrivateKey(), false);
       saveSiteList(siteList);
       updateMenu();
-      window.router.go("#!/site/" + i);
-    };
+      btn_ok.disabled = false;
+    }
+    
+    function Finish(){
+      window.router.go("#!/site/" + currentSiteIndex);
+    }
   });
 
   r.on(/^\/site\/([0-9]+)\/newpage$/, function(req){
