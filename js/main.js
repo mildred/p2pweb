@@ -17,8 +17,9 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   var menu_template = pure('ul.menu').compile({
     'li.sitelist': {
       'site<-sites': {
-        'a':      function(a){ return "Site " + a.item.siteKey; },
-        'a@href': '#!/site/#{site.pos}'
+        'a.edit-link':      "Site #{site.siteKey}",
+        'a.edit-link@href': '#!/site/#{site.pos}',
+        'a.view-link@href': '/obj/#{site.siteKey}/'
       }
     }
   });
@@ -28,8 +29,10 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     'li.newpage a@href': '#!/site/#{siteNum}/newpage',
     'li.pageitem': {
       'page<-pages': {
-        'a':      'page.path',
-        'a@href': '#!/site/#{siteNum}/page#{page.path}',
+        'a.edit-link':      'page.path',
+        'a.edit-link@href': '#!/site/#{siteNum}/page#{page.path}',
+        'a.view-current-link@href': '/obj/#{siteKey}#{page.path}',
+        'a.view-latest-link@href':  '/obj/#{siteKey},s#{page.path}',
         'span.section': 'page.section',
         '@class+': function(a) {
           return (a.item.section > a.context.lastSignedSection) ?
@@ -107,7 +110,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   // Rich text editor
   //
   
-  function initEditor(selector, onsave, oninit, onsetup){
+  function initEditor(selector, callbacks){
     //console.log('tinymce init: ' + selector);
     tinymce.remove(selector);
     tinymce.init({
@@ -136,10 +139,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       },
     
       save_enablewhendirty: false,  
-      save_onsavecallback: onsave,
+      save_onsavecallback: callbacks.save,
       
-      init_instance_callback: oninit,
-      setup: onsetup
+      link_list: callbacks.link_list,
+      init_instance_callback: callbacks.init,
+      setup: callbacks.setup,
     });
   };
   
@@ -276,40 +280,54 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       inputs[i].addEventListener('input', updateInputSize);
     }
 
-    initEditor("#section-website-page textarea.rich", saveDocument, function(editor){
-      var parser = new DOMParser();
-      title.addEventListener('input', saveTitle);
-      
-      function getEditorDOM(){
-        var html = editor.getContent();
-        return parser.parseFromString(html, "text/html");
-      }
-      
-      function setEditorDOM(dom, onlyHEAD){
-        var breakObject = {};
-        var html = dom.documentElement.outerHTML;
-        if(onlyHEAD) editor.on('BeforeSetContent', breakEvent);
-        try {
-          editor.setContent(html);
-        } catch(e) {
-          if(e !== breakObject) throw e;
+    initEditor("#section-website-page textarea.rich", {
+      save: saveDocument, 
+      init: function(editor){
+        var parser = new DOMParser();
+        title.addEventListener('input', saveTitle);
+        
+        function getEditorDOM(){
+          var html = editor.getContent();
+          return parser.parseFromString(html, "text/html");
         }
-        if(onlyHEAD) editor.off('BeforeSetContent', breakEvent);
+        
+        function setEditorDOM(dom, onlyHEAD){
+          var breakObject = {};
+          var html = dom.documentElement.outerHTML;
+          if(onlyHEAD) editor.on('BeforeSetContent', breakEvent);
+          try {
+            editor.setContent(html);
+          } catch(e) {
+            if(e !== breakObject) throw e;
+          }
+          if(onlyHEAD) editor.off('BeforeSetContent', breakEvent);
 
-        function breakEvent(e){
-          throw breakObject;
+          function breakEvent(e){
+            throw breakObject;
+          }
         }
-      }
-    
-      function saveTitle(){
-        var doc = getEditorDOM();
-        var doc_title = doc.head.querySelector("title");
-        if(!doc_title) {
-          doc_title = doc.createElement("title");
-          doc.head.appendChild(doc_title);
+      
+        function saveTitle(){
+          var doc = getEditorDOM();
+          var doc_title = doc.head.querySelector("title");
+          if(!doc_title) {
+            doc_title = doc.createElement("title");
+            doc.head.appendChild(doc_title);
+          }
+          doc_title.textContent = this.value;
+          setEditorDOM(doc, true);
         }
-        doc_title.textContent = this.value;
-        setEditorDOM(doc, true);
+      },
+      link_list: function(cb){
+        var res = [];
+        var pages = site.getFileList();
+        for(path in pages) {
+          res.push({
+            title: path, 
+            value: "~" + path
+          });
+        }
+        cb(res);
       }
     });
     

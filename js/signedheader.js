@@ -271,7 +271,7 @@ SignedHeader.prototype.getFile = function(path, version) {
   return files[path] || null;
 };
 
-SignedHeader.prototype.getFileList = function(path, version) {
+SignedHeader.prototype.getFileList = function(version) {
   var list = this.getMergedHeader("Files", version, {append_section: true});
   for(k in list) if(!list[k]) delete list[k];
   return list;

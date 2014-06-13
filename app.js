@@ -153,14 +153,15 @@ var serveFile = function(fid, res, query, opts){
   }  
 };
 
-app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)?$/, function(req, res){
+app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(req, res){
   var query_string = (/^[^\?]*(\?.*)$/.exec(req.url) || [])[1];
   var fid = req.params[0].toLowerCase();
   var ver = req.params[2] || "";
   var flags = req.params[3] || "" // Should not contain A-F a-f
-  var proxy = flags.indexOf("P") != -1;
+  var proxy    = flags.indexOf("P") != -1;
+  var unsigned = flags.indexOf('s') != -1 || ver == '+';
   var path  = req.params[4];
-  var cap = /\/~([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(\/.*)?$/.exec(path);
+  var cap = /\/~([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[s]+)?(\/.*)?$/.exec(path);
   if(cap) {
     if(cap[1] && cap[1].length > 0) {
       fid = cap[1].toLowerCase();
@@ -169,8 +170,9 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)?$/, function(req
     if(cap[3] && cap[3].length > 0) {
       ver = cap[3];
     }
-    path = cap[4] || "";
-    var newFlags = (proxy ? "P" : "");
+    flags = cap[4] || ""; 
+    path = cap[5] || "";
+    var newFlags = (proxy ? "P" : "") + (unsigned ? "s" : "") + flags;
     if(ver.length      > 0) ver      = "," + ver;
     if(newFlags.length > 0) newFlags = "," + newFlags;
     res.setHeader("Location", "/obj/" + fid + ver + newFlags + path + query_string);
@@ -192,9 +194,9 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)?$/, function(req
       }
       var h = new SignedHeader(verifysign);
       h.parseText(data.toString());
-      if(ver != '+') {
+      ver = parseInt(ver);
+      if(!unsigned) {
         h.checkHeaders();
-        ver = parseInt(ver);
         if(isNaN(ver)) ver = h.getLastSignedSection();
         res.setHeader("P2PWS-Display-Version", ver);
         res.setHeader("P2PWS-Version-Check", "signed");
@@ -210,11 +212,18 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[P]+)?(\/.*)?$/, function(req
         var ids = h.getSectionsIds(sha1sum);
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(404, "Not Found");
-        var displayVer   = isFinite(ver) ? ver :
-                           (ver == '+')  ? ids.length : (ids.length - 1);
-        var displayVerId = ver == '+' ? ids.last : ids[displayVer];
-        var lastVer      = (ids.last == ids[ids.length - 1]) ? ids.length-1 : ids.length;
-        res.end("Not Found: path not registered\nPath: " + path + "\nWebsite: " + fid + "\nDisplay Version:     #" + displayVer + " " + displayVerId + "\nLast Signed Version: #" + (ids.length - 1) + " " + ids[ids.length-1] + "\nLast Version:        #" + lastVer + " " + ids.last + "\n");
+        var displayVer   = isFinite(ver) ? ver
+                         : unsigned      ? ids.length
+                                         : (ids.length - 1);
+        var displayVerId = unsigned      ? ids.last
+                                         : ids[displayVer];
+        var lastVer      = (ids.last == ids[ids.length - 1]) ? ids.length-1
+                                                             : ids.length;
+        res.end("Not Found: path not registered\n" +
+          "Path: " + path + "\nWebsite: " + fid + "\n" +
+          "Display Version:     #" + displayVer + " " + displayVerId + "\n" +
+          "Last Signed Version: #" + (ids.length - 1) + " " + ids[ids.length-1] + "\n" +
+          "Last Version:        #" + lastVer + " " + ids.last + "\n");
       }
     });
   } else {
