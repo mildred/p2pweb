@@ -313,7 +313,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       }
     });
     
-    function updateMarkupBeforeSave(html){
+    function updateMarkupBeforeSave(html, path){
       var doc = (new DOMParser()).parseFromString(html, "text/html");
       var now = new Date();
       
@@ -323,30 +323,38 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
         doc.head.insertAdjacentHTML('afterbegin',
           '<link rel="schema.dcterms" href="http://purl.org/dc/terms/">');
       }
-
-      var dateCreated = doc.head.querySelector("meta[name='dcterms.created']");
-      if(!dateCreated) {
-        dateCreated = doc.createElement('meta');
-        dateCreated.setAttribute('name',    'dcterms.created');
-        dateCreated.setAttribute('content', now.toISOString());
-        doc.head.appendChild(dateCreated);
+      
+      if(!doc.head.querySelector("link[rel='schema.p2pws']")) {
+        doc.head.insertAdjacentHTML('afterbegin',
+          '<link rel="schema.p2pws" href="tag:mildred.fr,2014:P2PWS/meta">');
       }
 
-      var dateUpdated = doc.head.querySelector("meta[name='dcterms.date']");
-      if(!dateUpdated) {
-        dateUpdated = doc.createElement('meta');
-        dateUpdated.setAttribute('name',    'dcterms.date');
-        doc.head.appendChild(dateUpdated);
+      setMeta(doc, 'dcterms.created', now.toISOString(), false);
+      setMeta(doc, 'dcterms.date',    now.toISOString(), true);
+      setMeta(doc, 'p2pws.site.sha1',     site.getFirstId(sha1hex),      true);
+      setMeta(doc, 'p2pws.site.revision', site.getLastUnsignedSection(), true);
+      setMeta(doc, 'p2pws.page.path',     path, true);
+      
+      function setMeta(doc, name, content, overwrite) {
+        var tag = doc.head.querySelector("meta[name='" + name + "']");
+        if(!tag) {
+          tag = doc.createElement('meta');
+          tag.setAttribute('name', name);
+          doc.head.appendChild(tag);
+          tag.setAttribute('content', content);
+        } else if(overwrite) {
+          tag.setAttribute('content', content);
+        }
+        return tag;
       }
-      dateUpdated.setAttribute('content', now.toISOString());
       
       return doc.documentElement.outerHTML;
     }
     
     function saveDocument(editor){
-      var doc = updateMarkupBeforeSave(editor.getContent());
-      var docid = sha1hex(doc);
       var path = link.value;
+      var doc = updateMarkupBeforeSave(editor.getContent(), path);
+      var docid = sha1hex(doc);
       if(oldPath && oldPath != path) {
         site.rmFile(oldPath);
       }
