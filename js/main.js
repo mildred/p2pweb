@@ -26,11 +26,11 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   
   var section_website_template = pure('#section-website').compile({
     'h1': function(a){ return "Site " + a.context.siteKey; },
-    'li.newpage a@href': '#!/site/#{siteNum}/newpage',
+    'li.newpage a@href': '#!/site/#{siteId}/newpage',
     'li.pageitem': {
       'page<-pages': {
         'a.edit-link':      'page.path',
-        'a.edit-link@href': '#!/site/#{siteNum}/page#{page.path}',
+        'a.edit-link@href': '#!/site/#{siteId}/page#{page.path}',
         'a.view-current-link@href': '/obj/#{siteKey}#{page.path}',
         'a.view-latest-link@href':  '/obj/#{siteKey},s#{page.path}',
         'span.section': 'page.section',
@@ -224,6 +224,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
+    var siteKey = site.getFirstId(sha1hex);
     var pageArray = [];
     for(path in pages) {
       pages[path].path = path;
@@ -231,17 +232,23 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     }
     document.querySelector('#section-website').outerHTML = section_website_template({
       site: site,
-      siteKey: site.getFirstId(sha1hex),
-      siteNum: sitenum,
+      siteKey: siteKey,
+      siteId: sitenum || siteKey,
       pages: pageArray,
       lastSignedSection: site.getLastSignedSection()
     });
+
+    var btn_save_pkey = document.querySelector('#section-website button.btn-save-pkey');
+    var btn_sign_rev  = document.querySelector('#section-website button.btn-sign-revision');
+    btn_save_pkey.disabled = !privateKey;
+    btn_sign_rev.disabled  = !privateKey;
+    
     if(privateKey) {
-      document.querySelector('#section-website button.btn-save-pkey').addEventListener('click', function(){
+      btn_save_pkey.addEventListener('click', function(){
         var blob = new Blob([privateKey], {type: "application/x-pem-file"});
         saveAs(blob, "private.pem");
       });
-      document.querySelector('#section-website button.btn-sign-revision').addEventListener('click', function(){
+      btn_sign_rev.addEventListener('click', function(){
         site.addSignature(sign.sign(privateKey));
         saveSite(site);
         saveSiteList(siteList);
@@ -447,6 +454,18 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     });
   }
   
+  function getSiteWithUI(siteKey, callback){
+    getBlobNoCache(siteKey, function(err, content){
+      if(err) {
+        alert("Could not load site " + siteKey + ":\n" + err.status + " " + err.statusText);
+        return callback();
+      }
+      var site = new SignedHeader();
+      site.parseText(content);
+      callback(site);
+    });
+  }
+  
   var currentSite;
 
   //
@@ -455,26 +474,35 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
 
   var r = new Router();
 
-  r.on(/^\/site\/([0-9]+)$/, function(req){
+  r.on(/^\/site\/([0-9a-fA-F]+)$/, function(req){
     document.querySelectorAll("section.showhide").hide();
-    var sitenum = parseInt(req[1]);
-    var site = siteList[sitenum];
-    if(!site) window.router.go("#!/");
-    site.getSite(function(err, s){
-      if(err) {
-        alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-        window.router.go("#!/");
-        return;
-      }
-      //console.log(site);
-      updateSite(sitenum, s, site.key);
-      document.querySelectorAll("#section-website-page").hide();
-    });
+    var siteKey = req[1].toLowerCase();
+    if(siteKey.length < 40) {
+      var sitenum = parseInt(req[1]);
+      var site = siteList[sitenum];
+      if(!site) window.router.go("#!/");
+      site.getSite(function(err, s){
+        if(err) {
+          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
+          window.router.go("#!/");
+          return;
+        }
+        //console.log(site);
+        updateSite(sitenum, s, site.key);
+        document.querySelectorAll("#section-website-page").hide();
+      });
+    } else {
+      getSiteWithUI(siteKey, function(site){
+        if(!site) return r.go("#!/");
+        updateSite(null, site);
+        document.querySelectorAll("#section-website-page").hide();
+      });
+    }
   });
 
   r.on("/site/new", function(){
     document.querySelectorAll("section.showhide").hide();
-    var section = document.querySelector("section#section-other-website");
+    var section = document.querySelector("section#section-new-website");
     section.show();
     var website_id = section.querySelector(".website input");
     var btn_gen_id = section.querySelector(".website .btn-generate");
