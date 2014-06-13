@@ -1,7 +1,15 @@
 var SignedHeader = function(checksign, text){
   this._checksign = checksign;
   this.parseCheckText(text);
+  this.onchange = [];
 };
+
+SignedHeader.prototype.notifyChange = function() {
+  this.onchange = this.onchange || [];
+  for(var i = 0; i < this.onchange.length; i++){
+    this.onchange[i].apply(this, []);
+  }
+}
 
 SignedHeader.prototype.parseCheckText = function (text) {
   this.parseText(text);
@@ -47,6 +55,7 @@ SignedHeader.prototype.parseText = function (text) {
       if(!last) this.headers[j-1].text += "\n";
     }
   }
+  this.notifyChange();
 }
 
 SignedHeader.prototype.checkHeaders = function (checksign, truncate, callbacksection) {
@@ -81,6 +90,7 @@ SignedHeader.prototype.checkHeaders = function (checksign, truncate, callbacksec
   }
   this.text    = truncate ? validtxt   : txt;
   this.headers = truncate ? validheads : heads;
+  if(txt != validtxt) this.notifyChange();
   return checked;
 };
 
@@ -157,6 +167,7 @@ SignedHeader.prototype.addHeader = function (name, value) {
     value: value,
     section: lasthead.section + ((lasthead.name == "Signature") ? 1 : 0)
   });
+  this.notifyChange();
 }
 
 SignedHeader.prototype.addSignature = function (signfunction, addDate) {
@@ -168,26 +179,30 @@ SignedHeader.prototype.addSignature = function (signfunction, addDate) {
   return true;
 }
 
-SignedHeader.prototype.getFirstHeader = function (name, rev) {
+SignedHeader.prototype.getFirstHeader = function (name, exact_rev) {
   for(var i = 0; i < this.headers.length; i++) {
     var h = this.headers[i];
-    if(rev && h.section > rev) return undefined;
-    if(h.name == name && (!rev || h.section == rev)) return h.value;
+    if(exact_rev && h.section > exact_rev) return undefined;
+    if(h.name == name && (!exact_rev || h.section == exact_rev)) return h.value;
   }
   return undefined;
 }
 
-SignedHeader.prototype.getLastHeader = function (name, rev) {
+SignedHeader.prototype.getLastHeader = function (name, exact_rev) {
   if(name === undefined) return this.headers[this.headers.length-1];
   for(var i = this.headers.length - 1; i >= 0; i--) {
     var h = this.headers[i];
-    if(rev && h.section < rev) return undefined;
-    if(h.name == name && (!rev || h.section == rev)) return h.value;
+    if(exact_rev && h.section < exact_rev) return undefined;
+    if(h.name == name && (!exact_rev || h.section == exact_rev)) return h.value;
   }
   return undefined;
 }
 
-SignedHeader.prototype.setLastHeader = function (name, value) {
+SignedHeader.prototype.getUnsignedHeader = function(name) {
+  this.getLastHeader(name, this.getLastUnsignedSection())
+}
+
+SignedHeader.prototype.setUnsignedHeader = function (name, value) {
   value = this._fixValue(value);
   for(var i = this.headers.length - 1; i >= 0; i--) {
     var h = this.headers[i];
@@ -195,6 +210,7 @@ SignedHeader.prototype.setLastHeader = function (name, value) {
       h.value = value
       h.text  = name + ": " + this._escapeValue(value) + "\n";
       this._recomputeText();
+      this.notifyChange();
       return;
     } else if(h.name == "Signature") {
       break;
@@ -242,7 +258,7 @@ SignedHeader.prototype.getMergedHeader = function(name, version, opts) {
 SignedHeader.prototype.addFile = function(path, id, headers) {
   var files = {};
   try{
-    files = JSON.parse(this.getLastHeader("Files-Merge", this.getLastUnsignedSection())) || {};
+    files = JSON.parse(this.getUnsignedHeader("Files-Merge")) || {};
   } catch(e) {}
   if(id) {
     files[path] = {
@@ -259,7 +275,7 @@ SignedHeader.prototype.addFile = function(path, id, headers) {
     if(!lastFiles) lastFiles = this.getMergedHeader("Files", lastSection - 1);
     if(!lastFiles[p]) delete files[p];
   }
-  this.setLastHeader("Files-Merge", files);
+  this.setUnsignedHeader("Files-Merge", files);
 };
 
 SignedHeader.prototype.rmFile = function(path) {

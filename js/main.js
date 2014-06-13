@@ -1,6 +1,6 @@
 
-require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.js', '/js/loaded', '/js/blob/Blob', '/js/filesaver/FileSaver'],
-  function(KeyGen, sign, Router, sha1hex, pure, _, _, saveAs)
+require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.js', '/js/loaded', '/js/blob/Blob', '/js/filesaver/FileSaver'],
+  function(KeyGen, keytools, sign, Router, sha1hex, pure, _, _, saveAs)
 {
   var pure = pure.$p;
 
@@ -25,7 +25,9 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   });
   
   var section_website_template = pure('#section-website').compile({
-    'h1': function(a){ return "Site " + a.context.siteKey; },
+    '.meta .revision':         "lastSignedSection",
+    '.meta .key':              "siteKey",
+    'input[name=title]@value': "title",
     'li.newpage a@href': '#!/site/#{siteId}/newpage',
     'li.pageitem': {
       'page<-pages': {
@@ -225,6 +227,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
     var siteKey = site.getFirstId(sha1hex);
+    var siteTitle = site.getLastHeader("Title");
     var pageArray = [];
     for(path in pages) {
       pages[path].path = path;
@@ -232,30 +235,58 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     }
     document.querySelector('#section-website').outerHTML = section_website_template({
       site: site,
+      title: siteTitle,
       siteKey: siteKey,
       siteId: sitenum || siteKey,
       pages: pageArray,
       lastSignedSection: site.getLastSignedSection()
     });
 
+    var btn_open_pkey = document.querySelector('#section-website button.btn-open-pkey');
     var btn_save_pkey = document.querySelector('#section-website button.btn-save-pkey');
     var btn_sign_rev  = document.querySelector('#section-website button.btn-sign-revision');
+    var input_title   = document.querySelector('#section-website input[name=title]');
+    btn_open_pkey.disabled = privateKey;
     btn_save_pkey.disabled = !privateKey;
     btn_sign_rev.disabled  = !privateKey;
     
-    if(privateKey) {
-      btn_save_pkey.addEventListener('click', function(){
-        var blob = new Blob([privateKey], {type: "application/x-pem-file"});
-        saveAs(blob, "private.pem");
-      });
-      btn_sign_rev.addEventListener('click', function(){
-        site.addSignature(sign.sign(privateKey));
-        saveSite(site);
-        saveSiteList(siteList);
-        updateSite(sitenum, site, privateKey);
-        window.location = "#!/site/" + sitenum;
-      });
-    }
+    input_title.addEventListener('input', function(){
+      site.setUnsignedHeader("Title", this.value);
+    })
+    
+    input_title.addEventListener('change', function(){
+      saveSite(site);
+    })
+
+    keytools.install_open_key_handler(btn_open_pkey, function(err, privateKey_, crypt){
+      if(err) {
+        return alert("Could not load key file: " + err);
+      }
+      if(!privateKey_) {
+        return alert("Key file doesn't contain private key.");
+      }
+      var publicKey = crypt.getKey().getPublicBaseKeyB64();
+      var publicKeyExpected = site.getFirstHeader("PublicKey");
+      if(publicKeyExpected != publicKey) {
+        return alert("You selected the wrong key.\n" +
+          "Expected public key: " + publicKeyExpected + "\n" +
+          "Provided public key: " + publicKey);
+      }
+      privateKey = privateKey_;
+      btn_save_pkey.disabled = false;
+      btn_sign_rev.disabled  = false;
+    });
+    
+    btn_save_pkey.addEventListener('click', function(){
+      var blob = new Blob([privateKey], {type: "application/x-pem-file"});
+      saveAs(blob, "private.pem");
+    });
+    
+    btn_sign_rev.addEventListener('click', function(){
+      site.addSignature(sign.sign(privateKey));
+      saveSite(site);
+      window.router.go("#!/site/" + (sitenum || siteKey));
+    });
   }
   
   function parseMetaData(existingContent){
