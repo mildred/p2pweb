@@ -40,6 +40,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   });
   
   var section_website_page_template = pure('#section-website-page').compile({
+    'input[name=title]@value': 'title',
     'input[name=ctime]@value': 'ctime',
     'input[name=mtime]@value': 'mtime',
     'input[name=url]@value':   'url',
@@ -107,7 +108,7 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
   //
   
   function initEditor(selector, onsave, oninit, onsetup){
-    console.log('tinymce init: ' + selector);
+    //console.log('tinymce init: ' + selector);
     tinymce.remove(selector);
     tinymce.init({
       selector: selector,
@@ -185,8 +186,8 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
       };
     }
     localStorage.setItem("P2PWS.siteList", JSON.stringify(siteList))
-    console.log("save to localStorage");
-    console.log(siteList);
+    //console.log("save to localStorage");
+    //console.log(siteList);
   }
   
   function addSiteToList(siteList, site, privateKey, overwrite){
@@ -246,24 +247,28 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     }
   }
   
+  function parseMetaData(existingContent){
+    var doc = (new DOMParser()).parseFromString(existingContent.body, "text/html");
+    var dateCreated = doc.head.querySelector("meta[name='dcterms.created']");
+    var dateUpdated = doc.head.querySelector("meta[name='dcterms.date']");
+    var title       = doc.head.querySelector("title");
+    
+    if(dateCreated) existingContent.ctime = dateCreated.getAttribute("content");
+    if(dateUpdated) existingContent.mtime = dateUpdated.getAttribute("content");
+    if(title)       existingContent.title = title.textContent;
+  }
+  
   function updateSitePageEditor(sitenum, site, existingContent){
     existingContent = existingContent || {};
+    parseMetaData(existingContent);
     var newpage = !existingContent.url;
     var oldPath = existingContent.url;
-    document.querySelector('#section-website-page').outerHTML = section_website_page_template({
-      ctime: existingContent.ctime || "",
-      mtime: existingContent.mtime || "",
-      url:   existingContent.url   || "",
-      body:  existingContent.body  || ""
-    });
-    
-    console.log("Load: " + existingContent.body);
-
+    document.querySelector('#section-website-page').outerHTML = section_website_page_template(existingContent);
     var title  = document.querySelector("#section-website-page input[name=title]");
     var link   = document.querySelector("#section-website-page input[name=url]");
     var ctime  = document.querySelector("#section-website-page input[name=ctime]");
     var mtime  = document.querySelector("#section-website-page input[name=mtime]");
-    var inputs = document.querySelectorAll("#section-new-page input[type=text]");
+    var inputs = document.querySelectorAll("#section-website-page input[type=text]");
 
     updateTime();
     if(newpage) title.addEventListener('input', updateLinkURL);
@@ -272,27 +277,74 @@ require(['/js/keygen', '/js/sign', '/js/router', '/js/sha1hex', '/js/pure/pure.j
     }
 
     initEditor("#section-website-page textarea.rich", saveDocument, function(editor){
+      var parser = new DOMParser();
       title.addEventListener('input', saveTitle);
-      var doc = editor.getDoc();
-      var doc_title = doc.querySelector("head > title");
-      if(!doc_title) {
-        console.log("create title element");
-        console.log(doc.firstElementChild.outerHTML);
-        doc_title = doc.createElement("title");
-        doc.querySelector("head").appendChild(doc_title);
+      
+      function getEditorDOM(){
+        var html = editor.getContent();
+        return parser.parseFromString(html, "text/html");
       }
       
-      title.value = doc_title.textContent;
+      function setEditorDOM(dom, onlyHEAD){
+        var breakObject = {};
+        var html = dom.documentElement.outerHTML;
+        if(onlyHEAD) editor.on('BeforeSetContent', breakEvent);
+        try {
+          editor.setContent(html);
+        } catch(e) {
+          if(e !== breakObject) throw e;
+        }
+        if(onlyHEAD) editor.off('BeforeSetContent', breakEvent);
+
+        function breakEvent(e){
+          throw breakObject;
+        }
+      }
     
       function saveTitle(){
-        var doc = editor.getDoc();
-        console.log(this.value);
-        doc.querySelector("head > title").textContent = this.value;
+        var doc = getEditorDOM();
+        var doc_title = doc.head.querySelector("title");
+        if(!doc_title) {
+          doc_title = doc.createElement("title");
+          doc.head.appendChild(doc_title);
+        }
+        doc_title.textContent = this.value;
+        setEditorDOM(doc, true);
       }
     });
     
-    function saveDocument(document){
-      var doc = document.getContent();
+    function updateMarkupBeforeSave(html){
+      var doc = (new DOMParser()).parseFromString(html, "text/html");
+      var now = new Date();
+      
+      // http://wiki.whatwg.org/wiki/MetaExtensions
+      
+      if(!doc.head.querySelector("link[rel='schema.dcterms']")) {
+        doc.head.insertAdjacentHTML('afterbegin',
+          '<link rel="schema.dcterms" href="http://purl.org/dc/terms/">');
+      }
+
+      var dateCreated = doc.head.querySelector("meta[name='dcterms.created']");
+      if(!dateCreated) {
+        dateCreated = doc.createElement('meta');
+        dateCreated.setAttribute('name',    'dcterms.created');
+        dateCreated.setAttribute('content', now.toISOString());
+        doc.head.appendChild(dateCreated);
+      }
+
+      var dateUpdated = doc.head.querySelector("meta[name='dcterms.date']");
+      if(!dateUpdated) {
+        dateUpdated = doc.createElement('meta');
+        dateUpdated.setAttribute('name',    'dcterms.date');
+        doc.head.appendChild(dateUpdated);
+      }
+      dateUpdated.setAttribute('content', now.toISOString());
+      
+      return doc.documentElement.outerHTML;
+    }
+    
+    function saveDocument(editor){
+      var doc = updateMarkupBeforeSave(editor.getContent());
       var docid = sha1hex(doc);
       var path = link.value;
       if(oldPath && oldPath != path) {
