@@ -5,6 +5,7 @@ var sockets = require('./sockets');
 var storage = require('./storage');
 var sha1sum = require('./sha1sum');
 var KadWsRpc = require('./kadwsrpc');
+var KadUtpRpc = require('./rpc');
 var KadHttpRpc = require('./kadhttprpc');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
@@ -12,6 +13,7 @@ var SignedHeader = require('./js/signedheader');
 var app = express();
 var websock = new sockets.server();
 var kadwsrpc = new KadWsRpc();
+var kadutprpc = new KadUtpRpc();
 var kadhttprpc = new KadHttpRpc();
 var dht;
 
@@ -56,8 +58,24 @@ app.put('/obj/:fid', function(req, res){
   });
 });
 
-app.post("/rpc/kad", function(res, req){
+app.post("/rpc/kad", function(res, req){ // FIXME: argument order is wrong
   kadhttprpc.handle_request(res, req);
+});
+
+app.get("/rpc/seeds", function(req, res){
+  if(!dht) {
+    res.setHeader("Content-Type", "text/plain");
+    res.writeHead(503, "Not Accessible");
+    res.end("kadmelia not initialized, try again later.");
+  } else {
+    res.setHeader("Content-Type", "text/plain");
+    var seeds = dht.getSeeds();
+    for(var i = 0; i < seeds.length; i++) {
+      var seed = seeds[i];
+      res.write(seed.id.toString() + "\t" + seed.endpoint + "\n");
+    }
+    res.end();
+  }
 });
 
 var proxyFile = function(res2, options){
@@ -244,7 +262,7 @@ websock.connect('/ws/kad', function(request, socket){
 });
 
 module.exports = {
-  kadrpc: kadhttprpc,
+  kadrpc: kadutprpc,
   app: app,
   websock: websock,
   storage: storage,
@@ -254,6 +272,7 @@ module.exports = {
     storage.addfile(datadir);
   },
   initDHT: function(dht_){
+    console.log("Kad: Initialize DHT");
     dht = dht_;
   }
 };

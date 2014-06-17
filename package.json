@@ -5,15 +5,18 @@
     "express": "*",
     "pure": "*",
     "tmp": "*",
-    "websocket": "git://github.com/mildred/WebSocket-Node.git",
     "jssha": "git://github.com/Caligatio/jsSHA.git",
-    "vs-stun": "git://github.com/mildred/vs-stun.git",
     "stun": "*",
     "stunsrv": "*",
     "freeice": "*",
     "weld": "*",
     "tinymce": "*",
-    "jsencrypt": "git://github.com/travist/jsencrypt.git",
+    "jsencrypt": "git://github.com/travist/jsencrypt.git"
+  },
+  "disabled-dependencies": {
+    "utp": "git://github.com/mildred/utp.git",
+    "websocket": "git://github.com/mildred/WebSocket-Node.git",
+    "vs-stun": "git://github.com/mildred/vs-stun.git",
     "kademlia-dht": "git://github.com/mildred/kademlia-dht.git"
   },
   "engines": {
