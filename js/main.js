@@ -7,13 +7,13 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   //
   // Local storage
   //
-  
+
   localStorage.P2PWS = localStorage.P2PWS || {};
-  
+
   //
   // Templates
   //
-  
+
   var menu_template = pure('ul.menu').compile({
     'li.sitelist': {
       'site<-sites': {
@@ -23,7 +23,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       }
     }
   });
-  
+
   var section_website_template = pure('#section-website').compile({
     '.meta .revision':         "lastSignedSection",
     '.meta .key':              "siteKey",
@@ -43,7 +43,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       }
     }
   });
-  
+
   var section_website_page_template = pure('#section-website-page').compile({
     'input[name=title]@value': 'title',
     'input[name=ctime]@value': 'ctime',
@@ -51,13 +51,13 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     'input[name=url]@value':   'url',
     'textarea[name=body]':     'body'
   });
-  
+
   //
   // Communication with server
   //
-  
+
   var blobCache = {};
-  
+
   function sendBlob(blob, blobid, content_type, cb){
     if(typeof blobid == "function") {
       cb = blobid;
@@ -75,7 +75,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     };
     r.send(blob);
   }
-  
+
   function getBlob(blobid, cache, cb) {
     if(blobid === undefined) throw new Error("id is undefined");
     if(typeof cache == "function") {
@@ -99,19 +99,19 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     };
     r.send();
   }
-  
+
   function getBlobCache(blobid, cb) {
     return getBlob(blobid, true, cb);
   }
-  
+
   function getBlobNoCache(blobid, cb) {
     return getBlob(blobid, false, cb);
   }
-  
+
   //
   // Rich text editor
   //
-  
+
   function initEditor(selector, callbacks){
     //console.log('tinymce init: ' + selector);
     tinymce.remove(selector);
@@ -121,14 +121,14 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       content_css: "style.css",
       plugins: "save autolink autoresize code hr link fullpage media image paste table",
       browser_spellcheck : true,
-      
+
       // http://www.tinymce.com/wiki.php/Controls
       toolbar: "save fullpage code | undo redo | formatselect styleselect removeformat | bullist numlist | blockquote | link image media table hr",
       menubar : false,
-      
+
       target_list: false, // link
       paste_data_images: true, // paste
-      
+
       formats: {
           alignleft: {selector: 'p,h1,h2,h3,h4,h5,h6,td,th,div,ul,ol,li,table,img', classes: 'left'},
           aligncenter: {selector: 'p,h1,h2,h3,h4,h5,h6,td,th,div,ul,ol,li,table,img', classes: 'center'},
@@ -139,26 +139,20 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
           underline: {inline: 'add'},
           strikethrough: {inline: 'del'}
       },
-    
-      save_enablewhendirty: false,  
+
+      save_enablewhendirty: false,
       save_onsavecallback: callbacks.save,
-      
+
       link_list: callbacks.link_list,
       init_instance_callback: callbacks.init,
       setup: callbacks.setup,
     });
   };
-  
-  //
-  // Generate Key
-  //
-  
-  var keygen = new KeyGen(document.querySelector(".privkey"));
-  
+
   //
   // Model: Site List
   //
-  
+
   function getSiteList(callback){
     var siteList = [];
     try {
@@ -195,7 +189,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     //console.log("save to localStorage");
     //console.log(siteList);
   }
-  
+
   function addSiteToList(siteList, site, privateKey, overwrite){
     for(var i = 0; i < siteList.length; i++){
       var s = siteList[i];
@@ -211,9 +205,9 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     });
     return siteList.length - 1;
   }
-  
+
   var siteList = getSiteList();
-  
+
   //
   // Update UI
   //
@@ -223,9 +217,9 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       sites: siteList // FIXME: fetch sites before, or do we?
     });
   };
-  
+
   var privateKeyStore = {}
-  
+
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
     var siteKey = site.getFirstId(sha1hex);
@@ -252,11 +246,11 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     btn_open_pkey.disabled = privateKey;
     btn_save_pkey.disabled = !privateKey;
     btn_sign_rev.disabled  = !privateKey;
-    
+
     input_title.addEventListener('input', function(){
       site.setUnsignedHeader("Title", this.value);
     })
-    
+
     input_title.addEventListener('change', function(){
       saveSite(site);
     })
@@ -279,30 +273,30 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       btn_save_pkey.disabled = false;
       btn_sign_rev.disabled  = false;
     });
-    
+
     btn_save_pkey.addEventListener('click', function(){
       var blob = new Blob([privateKey], {type: "application/x-pem-file"});
       saveAs(blob, "private.pem");
     });
-    
+
     btn_sign_rev.addEventListener('click', function(){
       site.addSignature(sign.sign(privateKey));
       saveSite(site);
       window.router.go("#!/site/" + (sitenum || siteKey));
     });
   }
-  
+
   function parseMetaData(existingContent){
     var doc = (new DOMParser()).parseFromString(existingContent.body, "text/html");
     var dateCreated = doc.head.querySelector("meta[name='dcterms.created']");
     var dateUpdated = doc.head.querySelector("meta[name='dcterms.date']");
     var title       = doc.head.querySelector("title");
-    
+
     if(dateCreated) existingContent.ctime = dateCreated.getAttribute("content");
     if(dateUpdated) existingContent.mtime = dateUpdated.getAttribute("content");
     if(title)       existingContent.title = title.textContent;
   }
-  
+
   function updateSitePageEditor(sitenum, site, existingContent){
     var siteKey = site.getFirstId(sha1hex);
     existingContent = existingContent || {};
@@ -323,16 +317,16 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     }
 
     initEditor("#section-website-page textarea.rich", {
-      save: saveDocument, 
+      save: saveDocument,
       init: function(editor){
         var parser = new DOMParser();
         title.addEventListener('input', saveTitle);
-        
+
         function getEditorDOM(){
           var html = editor.getContent();
           return parser.parseFromString(html, "text/html");
         }
-        
+
         function setEditorDOM(dom, onlyHEAD){
           var breakObject = {};
           var html = dom.documentElement.outerHTML;
@@ -348,7 +342,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
             throw breakObject;
           }
         }
-      
+
         function saveTitle(){
           var doc = getEditorDOM();
           var doc_title = doc.head.querySelector("title");
@@ -365,25 +359,25 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         var pages = site.getFileList();
         for(path in pages) {
           res.push({
-            title: path, 
+            title: path,
             value: "~" + path
           });
         }
         cb(res);
       }
     });
-    
+
     function updateMarkupBeforeSave(html, path){
       var doc = (new DOMParser()).parseFromString(html, "text/html");
       var now = new Date();
-      
+
       // http://wiki.whatwg.org/wiki/MetaExtensions
-      
+
       if(!doc.head.querySelector("link[rel='schema.dcterms']")) {
         doc.head.insertAdjacentHTML('afterbegin',
           '<link rel="schema.dcterms" href="http://purl.org/dc/terms/">');
       }
-      
+
       if(!doc.head.querySelector("link[rel='schema.p2pws']")) {
         doc.head.insertAdjacentHTML('afterbegin',
           '<link rel="schema.p2pws" href="tag:mildred.fr,2014:P2PWS/meta">');
@@ -394,7 +388,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       setMeta(doc, 'p2pws.site.sha1',     siteKey, true);
       setMeta(doc, 'p2pws.site.revision', site.getLastUnsignedSection(), true);
       setMeta(doc, 'p2pws.page.path',     path, true);
-      
+
       function setMeta(doc, name, content, overwrite) {
         var tag = doc.head.querySelector("meta[name='" + name + "']");
         if(!tag) {
@@ -407,10 +401,10 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         }
         return tag;
       }
-      
+
       return doc.documentElement.outerHTML;
     }
-    
+
     function saveDocument(editor){
       var path = link.value;
       var doc = updateMarkupBeforeSave(editor.getContent(), path);
@@ -437,7 +431,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         }
       });
     }
-    
+
     function updateLinkURL(){
       var today = new Date();
       var dd = today.getDate();
@@ -452,11 +446,11 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         link.size = Math.max(link.getAttribute('size') || 10, val.length);
       }
     }
-    
+
     function updateInputSize(){
       this.size = Math.max(this.getAttribute('size') || 10, this.value.length);
     }
-    
+
     function updateTime(){
       var today = new Date();
       if(ctime.value == "" || ctime.value == ctime.generatedValue) {
@@ -466,13 +460,13 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       setTimeout(updateTime, 1000);
     }
   }
-  
+
   updateMenu();
-        
+
   //
   // SignedHeader
   //
-  
+
   function saveSite(site){
     //console.log(site);
     sendBlob(site.text, site.getFirstId(sha1hex), "application/vnd.p2pws", function(r, id){
@@ -484,7 +478,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       }
     });
   }
-  
+
   function getSiteWithUI(siteKey, callback){
     getBlobNoCache(siteKey, function(err, content){
       if(err) {
@@ -496,7 +490,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       callback(site);
     });
   }
-  
+
   var currentSite;
 
   //
@@ -505,27 +499,67 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   var r = new Router();
 
+  r.on("/site/open", function(){
+    document.querySelectorAll("section.showhide").hide();
+    var section = document.querySelector("section#section-open-website");
+    section.show();
+    var website_id = section.querySelector(".website input");
+    var btn_ok     = section.querySelector(".btn-ok");
+
+    btn_ok.addEventListener('click', Finish);
+
+    function Finish(){
+      window.router.go("#!/site/" + website_id.value);
+    }
+  });
+
   r.on("/site/new", function(){
     document.querySelectorAll("section.showhide").hide();
     var section = document.querySelector("section#section-new-website");
     section.show();
     var website_id = section.querySelector(".website input");
-    var btn_gen_id = section.querySelector(".website .btn-generate");
+    var btn_save   = section.querySelector(".btn-save");
+    var btn_open   = section.querySelector(".btn-open");
     var btn_ok     = section.querySelector(".btn-ok");
-    
-    btn_gen_id.disabled = true;
+    var span_wid   = section.querySelector(".website span")
+    var keylabel   = section.querySelector(".privkey span");
+
     btn_ok.disabled = true;
-    
-    keygen.onkey = KeyAvailable;
+    btn_save.disabled = true;
+
     btn_ok.addEventListener('click', Finish);
-    btn_gen_id.addEventListener('click', SiteIdAvailable);
     
+    console.log(keytools);
+    keytools.install_open_key_handler(btn_open, function(err, _, crypt){
+      KeyAvailable(crypt);
+    });
+    keytools.generate_private_crypt_handler(function(txt){
+      keylabel.textContent = txt;
+    }, KeyAvailable)
+
     var crypt;
     function KeyAvailable(crypt_){
       crypt = crypt_;
-      btn_gen_id.disabled = false;
+
+      var site = new SignedHeader();
+      site.addHeader("Format", "P2P Website");
+      site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
+      site.addSignature(sign.sign(crypt));
+      saveSite(site);
+      var id = site.getFirstId(sha1hex);
+      span_wid.textContent = id;
+      
+      btn_save.addEventListener('click', function(){
+        keytools.save_private_crypt_handler(crypt);
+      });
+      btn_ok.addEventListener('click', function(){
+        r.go("#!/site/" + id);
+      });
+
+      btn_save.disabled = false;
+      btn_ok.disabled = false;
     }
-    
+
     var currentSite;
     var currentSiteIndex;
     function SiteIdAvailable(){
@@ -541,7 +575,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       updateMenu();
       btn_ok.disabled = false;
     }
-    
+
     function Finish(){
       window.router.go("#!/site/" + currentSiteIndex);
     }
@@ -644,11 +678,11 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       });
     }
   });
-  
+
   r.fallback(function(){
     document.querySelectorAll("section.showhide").hide();
   });
-  
+
   r.run();
 });
 

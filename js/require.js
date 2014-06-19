@@ -65,14 +65,14 @@ var cache = new Object();
 var locks = new Object();
 
 function debug(x){
-  /*
+  /** /
   if(typeof x === "string") {
     console.log("require.js: " + x);
   } else {
     console.log("require.js:");
     console.log(x);
   }
-  */
+  //*/
 }
 
 // INFO Module getter
@@ -95,6 +95,7 @@ function require(identifier, callback){
     for(var i = 0; i < identifier.length; i++){
       (function(idx, modname){
         modules.push(require(modname, function(mod){
+          debug("In callback for module " + modname);
           modules[idx] = mod;
           modules_left--;
           if(modules_left == 0) {
@@ -112,7 +113,10 @@ function require(identifier, callback){
   var cacheid = '$'+descriptor.id;
   
   if (cache[cacheid]) {
-    if(callback) callback(cache[cacheid].exports);
+    debug("Module already in cache: " + identifier);
+    if(callback) return cache[cacheid].onReady(callback);
+    if(!cache[cacheid].ready)
+      throw new Error("Module " + identifier + " not ready, use a callback");
     return cache[cacheid].exports;
   }
   
@@ -127,6 +131,8 @@ function require(identifier, callback){
   function load(source){
     var module = cache[cacheid] = descriptor;
     module.exports = {};
+    module.ready = false;
+    module._readyCallbacks = [];
     
     var last_frame;
     var sub_frame = {
@@ -142,8 +148,13 @@ function require(identifier, callback){
       },
       on_ready: function(){
         this.num_requires = 0;
-        debug(module.uri + " notified ready, run callback");
+        module.ready = true;
+        debug(module.uri + " notified ready, run callbacks");
         callback.apply(cache[cacheid], [cache[cacheid].exports]);
+        var cb;
+        while(cb = module._readyCallbacks.pop()) {
+          cb.apply(cache[cacheid], [cache[cacheid].exports]);
+        }
         if(this.parent) {
           debug(module.uri + " ready, notify parents");
           this.parent.on_load();
@@ -162,6 +173,8 @@ function require(identifier, callback){
       parent: frame
     };
     
+    // Return a function that will mark the module as ready when called and not
+    // before. Bypass other dependencies (?)
     module.wait = function(){
       sub_frame.on_wait();
       var ready = false;
@@ -171,6 +184,13 @@ function require(identifier, callback){
         ready = true;
       };
     }
+    
+    // If the module is already in the cache, this function will take a callback
+    // that will be called when the module is ready.
+    module.onReady = function(callback) {
+      if(module.ready) return callback.apply(cache[cacheid], [cache[cacheid].exports]);
+      module._readyCallbacks.push(callback);
+    };
     
     if(!callback){
       var f = new Function('global', 'module', 'exports', source + '\n//# sourceURL='+module.uri);

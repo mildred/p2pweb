@@ -14,6 +14,7 @@
   <nav>
     <ul class="menu">
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
+      <li><a class="showhide" href="#!/site/open">Open Existing Website</a></li>
       <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
     </ul>
   </nav>
@@ -43,18 +44,28 @@
       <textarea class="rich" name="body"></textarea>
     </section>
   </section>
+  <section class="showhide" id="section-open-website">
+    <h1>Open Existing Website</h1>
+    <p class="website">Website ID:
+      <input type="text" size="40"/>
+    </p>
+    <button class="btn-ok">OK</button>
+  </section>
   <section class="showhide" id="section-new-website">
     <h1>New Website</h1>
     <p class="privkey">Private key:
       <button class="btn-generate">Generate</button>
       <button class="btn-open">Open</button>
-      <button class="btn-save">Save</button>
       <span></span>
-      <input type="file" value="Open from file" style="display:none">
     </p>
-    <p class="website">Website ID:
-      <input type="text" size="40"/>
-      <button class="btn-generate">Generate</button>
+    <p class="website">Website ID: <span></span></p>
+    <p>
+      You need to keep your private key in a secure place. The private key is a
+      file that you can use to update your site. Without it, it is absolutely
+      not possible to update it. If someone steal this key from you, anyone
+      could update your site.
+      <br/>
+      <button class="btn-save">Save Private Key</button>
     </p>
     <button class="btn-ok">OK</button>
   </section>

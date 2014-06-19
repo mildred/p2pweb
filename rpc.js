@@ -22,54 +22,70 @@ RPC.prototype.setUTP = function(utpServer) {
   var self = this;
   this._utpServer = utpServer;
 
+  utpServer.connectionOptions = {
+    objectMode: true
+  };
+
   utpServer.on('connection', function(connection){
-    self._setupUTP(connection, 0);
-  });
-};
-
-RPC.prototype._setupUTP = function(connection, kind) {
-  var self = this;
-  var endpoint = this._makeURL({
-    protocol: "utp+p2pws",
-    host: connection.host,
-    port: connection.port
-  });
-  
-  var utp = new UTPMsg(connection, kind);
-  this._utpConnections[endpoint] = utp;
-
-  utp.on('request', function(rawData, id){
-    //console.log("RPC: receive " + rawData.toString());
-    data = JSON.parse(rawData.toString(), kad.JSONReviver);
-    var response = undefined;
-    if(data.request == 'kademlia') {
-      response = {ok: self._handleKadMessage(data.type, endpoint, data.data)};
-    } else if(data.request == 'publicURL') {
-      //console.log("RPC: received publicURL from " + endpoint);
-      response = {ok: endpoint};
-    } else if(data.request == 'object') {
-      self._getObject(data.fid, function(err, data){
-        if(err) return reply({error: err.toString()});
-        reply({ok: data});
-      }, endpoint, data);
-    } else if(!data.error) {
-      response = {error: "Unknown request"};
-      //console.log("RPC: unknown request");
-    }
-
-    if(response !== undefined) reply(response);
     
-    function reply(response){
-      //console.log("RPC: Send response: " + JSON.stringify(response));
-      utp.write(JSON.stringify(response), id);
+    var endpoint = self._makeURL({
+      protocol: "utp+p2pws",
+      host: connection.host,
+      port: connection.port
+    });
+    
+    var request = [];
+    
+    connection.on('data', function(data){
+      if(!data.meta) return request.push(data);
+      var meta = data.meta.toString();
+
+      if(meta == "flush-request") {
+        handleRequest(function(response){
+          connection.write(JSON.stringify(response));
+          var flush_response = new Buffer(data);
+          flush_response.meta = new Buffer("flush-response");
+          connection.write(flush_response);
+        });
+      }
+    });
+    
+    connection.on('end', function(){
+      handleRequest(function(response){
+        connection.end(JSON.stringify(response));
+      });
+    });
+    
+    function handleRequest(reply){
+      var requestBuf = Buffer.concat(request);
+      var requestObj;
+      request = [];
+      try {
+        requestObj = JSON.parse(requestBuf.toString(), kad.JSONReviver);
+      } catch(e) {
+        console.error("RPC: Received request, parse error: " + e.toString());
+        return reply({error: "Request Parse Error: " + e.toString()});
+      }
+      
+      if(requestObj.request == 'kademlia') {
+        return reply({ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)});
+      }
+        
+      if(requestObj.request == 'object') {
+        self._getObject(requestObj.fid, function(err, data){
+          if(err) return reply({error: err.toString()});
+          reply({ok: data});
+        });
+        return;
+      }
+
+      if(requestObj.request == 'publicURL') {
+        return reply({ok: endpoint});
+      }
+
+      reply({error: "Unknown request: " + requestBuf});
     }
   });
-  
-  utp.on('end', function(){
-    delete self._utpConnections[endpoint];
-  });
-  
-  return utp;
 };
 
 RPC.prototype._handleKadMessage = function(type, endpoint, data) {
@@ -102,22 +118,17 @@ RPC.prototype._makeURL = function(address) {
   return address.protocol + "://" + host + port + path;
 };
 
-RPC.prototype._connect = function(endpoint, callback) {
-  if(typeof(initialData) === 'function') {
-    callback = initialData;
-    initialData = undefined;
-  }
-
+RPC.prototype._connect = function(endpoint, data, callback) {
   var self = this;
   var addr = this._parseAddress(endpoint);
   if(addr.protocol == "utp+p2pws") {
-    if(this._utpConnections[endpoint]) {
-      callback(null, this._utpConnections[endpoint], addr);
-    } else {
-      this._utpServer.connect(addr.port, addr.host, function(err, conn) {
-        return callback(err, self._setupUTP(conn, 1), addr);
-      });
-    }
+    var opts = {
+      data: data,
+      objectMode: true
+    };
+    this._utpServer.connect(addr.port, addr.host, opts, function(err, conn) {
+      return callback(err, conn, addr);
+    });
   } else {
     return callback(new Error("Unknown protocol " + addr.protocol), null, addr);
   }
@@ -130,76 +141,12 @@ RPC.prototype._sendKad = function(type, endpoint, data, callback) {
     data: data
   };
   
-  this._connect(endpoint, function(err, utp, addr){
-    if(err) {
-      console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
-      return callback(err);
-    }
-    
-    utp.write(JSON.stringify(request), function(data){
-      //console.log("RPC: response from " + endpoint + " (" + type + "): " + data);
-      try {
-        data = JSON.parse(data.toString(), kad.JSONReviver);
-      } catch(e) {
-        console.error("KadUTP: Cannot parse response: " + e);
-        return callback(new Error("Invalid response: " + e));
-      }
-      if(data && data.error) {
-        console.error("KadUTP: error response: " + data.error);
-        return callback(new Error("Remote error: " + data.error));
-      }
-      if(!data || !data.ok){
-        console.error("KadUTP: no response");
-        return callback(new Error("Remote error: no response"));
-      }
-      callback(null, data.ok);
-    });
-  })
-  
-  /*
-  var self = this;
-  var addr = this._parseAddress(endpoint);
-
-  if(addr.protocol == "utp+p2pws") {
-    if(this._utpConnections[endpoint]) {
-      utpSend(this._utpConnections[endpoint]);
-    } else {
-      this._utpServer.connect(addr.port, addr.host, function(err, connection){
-        if(err) {
-          console.error("KadUTP: cannot connect to " + endpoint +  ":" + err);
-          return callback(err);
-        }
-        console.log("RPC: send " + type + " to " + endpoint);
-        utpSend(self._setupUTP(connection, 1));
-      });
-    }
-  } else {
-    console.error("Unknown protocol " + addr.protocol);
-    callback(new Error("Unknown protocol " + addr.protocol))
-  }
-  
-  function utpSend(utp){
-    utp.write(JSON.stringify(request), function(data){
-      console.log("RPC: response from " + endpoint + " (" + type + "): " + data);
-      try {
-        data = JSON.parse(data.toString(), kad.JSONReviver);
-      } catch(e) {
-        console.error("KadUTP: Cannot parse response: " + e);
-        return callback(new Error("Invalid response: " + e));
-      }
-      if(!data){
-        console.error("KadUTP: no response");
-        return callback(new Error("Remote error: no response"));
-      }
-      callback(null, data);
-    });
-  }
-  */
+  return this.request(endpoint, request, 30, callback);
 };
 
-RPC.prototype.request = function(endpoint, request, timeout, cb) {
+RPC.prototype.request = function(endpoint, request, timeout, callback) {
   if(typeof timeout == 'function') {
-    cb = timeout;
+    callback = timeout;
     timeout = undefined;
   }
   
@@ -207,31 +154,49 @@ RPC.prototype.request = function(endpoint, request, timeout, cb) {
   var timeoutId;
   if(timeout) timeoutId = setTimeout(onTimeOut, timeout * 1000);
   
-  this._connect(endpoint, function(err, utp, addr){
-    if(timedOut) return;
+  this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
+    if(timeoutId) clearTimeout(timeoutId);
+    if(timedOut)  return;
     if(err) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
-      return cb(err);
+      return callback(err);
     }
     
-    utp.write(JSON.stringify(request), function(data){
-      if(timeoutId) clearTimeout(timeoutId);
-      if(timedOut) return;
-      try {
-        data = JSON.parse(data.toString());
-      } catch(e) {
-        return cb(e);
-      }
-      if(data.error || !data.ok) {
-        return cb(new Error("Remote error: " + data.error));
-      }
-      cb(null, data.ok);
+    var response = [];
+    
+    utp.on('data', function(resdata){
+      response.push(resdata);
     });
+    
+    utp.on('end', function(){
+      response = Buffer.concat(response);
+      
+      try {
+        response = JSON.parse(response.toString(), kad.JSONReviver);
+      } catch(e) {
+        console.error("RPC: Cannot parse response: " + e);
+        return callback(new Error("Invalid response: " + e));
+      }
+      
+      if(response && response.error) {
+        console.error("RPC: error response: " + response.error);
+        return callback(new Error("Remote error: " + response.error));
+      }
+
+      if(!response || !response.ok){
+        console.error("RPC: no response");
+        return callback(new Error("Remote error: no response"));
+      }
+      
+      callback(null, response.ok);
+    });
+    
+    utp.end();
   });
   
   function onTimeOut(){
     timedOut = true;
-    cb(new Error('timeout'));
+    callback(new Error('timeout'));
   }
 };
 
