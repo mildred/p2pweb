@@ -1,5 +1,6 @@
 var fs      = require('fs');
 var http    = require('http');
+var random  = require('./random');
 var express = require('express');
 var sockets = require('./sockets');
 var storage = require('./storage');
@@ -16,21 +17,6 @@ var kadwsrpc = new KadWsRpc();
 var kadutprpc = new KadUtpRpc();
 var kadhttprpc = new KadHttpRpc();
 var dht;
-
-var randomInt = function (low, high) {
-  return Math.floor(Math.random() * (high - low) + low);
-}
-
-var randomKey = function (array) {
-  var keys = Object.keys(array);
-  var key  = randomInt(0, keys.length);
-  return keys[key];
-}
-
-var randomValue = function (array) {
-  return array[randomKey(array)];
-}
-
 
 app.get('/', function(req, res){
   res.sendfile(__dirname + "/index.html");
@@ -62,20 +48,70 @@ app.post("/rpc/kad", function(res, req){ // FIXME: argument order is wrong
   kadhttprpc.handle_request(res, req);
 });
 
+kadutprpc._getObject = function(fid, cb) {
+  if(!dht) return cb(Error("DHT not initialized"));
+  var file = storage.filelist[fid];
+  if(!file) return cb(Error("File not available"));
+  
+  fs.readFile(file.path, function (err, data) {
+    if(err) return cb(err);
+    cb(null, {data: data.toString(), metadata: file.metadata});
+  });
+};
+
+var failDHTNotInitilized = function(res){
+  res.setHeader("Content-Type", "text/plain");
+  res.writeHead(503, "Not Accessible");
+  res.end("kadmelia not initialized, try again later.");
+};
+
 app.get("/rpc/seeds", function(req, res){
-  if(!dht) {
-    res.setHeader("Content-Type", "text/plain");
-    res.writeHead(503, "Not Accessible");
-    res.end("kadmelia not initialized, try again later.");
-  } else {
-    res.setHeader("Content-Type", "text/plain");
-    var seeds = dht.getSeeds();
-    for(var i = 0; i < seeds.length; i++) {
-      var seed = seeds[i];
-      res.write(seed.id.toString() + "\t" + seed.endpoint + "\n");
-    }
-    res.end();
+  if(!dht) return failDHTNotInitilized(res);
+
+  res.setHeader("Content-Type", "text/plain");
+  var seeds = dht.getSeeds();
+  for(var i = 0; i < seeds.length; i++) {
+    var seed = seeds[i];
+    res.write(seed.id.toString() + "\t" + seed.endpoint + "\n");
   }
+  res.end();
+});
+
+app.get("/rpc/cache", function(req, res){
+  if(!dht) return failDHTNotInitilized(res);
+
+  res.setHeader("Content-Type", "text/plain");
+  var cache = dht.getCache();
+  for(var k1 in cache) {
+    var subcache = cache[k1];
+    for(var k2 in subcache) {
+      res.write(k1 + "\t" + k2 + "\n");
+    }
+  }
+  res.end();
+});
+
+app.get("/rpc/cache.json", function(req, res){
+  if(!dht) return failDHTNotInitilized(res);
+
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(dht.getCache()));
+});
+
+app.get("/rpc/cache/:k1.json", function(req, res){
+  if(!dht) return failDHTNotInitilized(res);
+
+  res.setHeader("Content-Type", "application/json");
+  var cache = dht.getCache()[req.params.k1] || {};
+  res.end(JSON.stringify(cache));
+});
+
+app.get("/rpc/cache/:k1/:k2.json", function(req, res){
+  if(!dht) return failDHTNotInitilized(res);
+
+  res.setHeader("Content-Type", "application/json");
+  var cache = dht.getCache()[req.params.k1] || {};
+  res.end(JSON.stringify(cache[req.params.k2] || null));
 });
 
 var proxyFile = function(res2, options){
@@ -96,63 +132,138 @@ var proxyFile = function(res2, options){
   req.end();
 }
 
+var getFile = function(fid, cb){
+  console.log("getFile(" + fid + ")");
+  var file = storage.filelist[fid];
+  if(file) {
+    console.log("getFile(" + fid + "): file available locally");
+    fs.readFile(file.path, function (err, data) {
+      if(err) {
+        err.httpStatus = 500;
+        return cb(err);
+      }
+      cb(null, data.toString(), file.metadata);
+    });
+    return;
+  }
+  
+  if(!dht) {
+    console.log("getFile(" + fid + "): DHT not initialized");
+    return cb(new Error("DHT not initialized"));
+  }
+  
+  console.log("getFile(" + fid + "): ask the network");
+  dht.getall(fid, function(err, data){
+    if(err) {
+      console.log("getFile(" + fid + "): " + err.toString());
+      err.httpStatus = 500;
+      return cb(err);
+    }
+    if(!data) {
+      console.log("getFile(" + fid + "): no data");
+      return cb();
+    }
+    console.log("getFile(" + fid + "): network answered");
+    
+    var availableDestinations = {};
+    for(k in data) {
+      if(!data[k].file_at) continue;
+      availableDestinations[k] = data[k].file_at;
+    }
+    var destination = random.value(availableDestinations);
+
+    kadutprpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
+      if(err) {
+        console.log("getFile(" + fid + "): " + err.toString());
+        err.httpStatus = 502;
+        return cb(err);
+      }
+      
+      console.log("getFile(" + fid + "): got data");
+      cb(null, reply.data, reply.metadata);
+    });
+  });
+};
+
 var redirectObjectNotFound = function(fid, path, res, opts) {
   opts = opts || {};
   res.setHeader("X-File-ID", fid)
   if(path != "") res.setHeader("X-File-Path", path)
-  if(!dht) {
-    res.setHeader("Content-Type", "text/plain");
-    res.writeHead(503, "Not Accessible");
-    res.end("kadmelia not initialized, try again later.");
-  } else {
-    dht.getall(fid, function(err, data){
-      if(err) {
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(500, "Internal Server Error");
-        res.write("Error:\n" + err);
-        res.end();
-      } else if(data === undefined) {
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(404, "Not Found");
-        res.write("Not Found: no contact to provide the data");
-        res.end();
-        //console.log(dht._routes);
-        //console.log(dht._routes.toString());
-      } else {
-        var availableDestinations = {};
-        for(k in data) {
-          if(!data[k].file_at) continue;
-          var dest = data[k].file_at
-          res.setHeader("X-Available-Location", "http://" + dest[0] + ":" + dest[1] + "/obj/" + fid + path + (opts.query_string || ""))
-          availableDestinations[k] = dest;
-        }
-        var destination = randomValue(availableDestinations);
-        //console.log(availableDestinations);
-        //console.log(randomKey(availableDestinations));
-        if(opts.proxy) {
-          proxyFile(res, {
-            host:   destination[0],
-            port:   destination[1],
-            path:   "/obj/" + fid + path + (opts.query_string || ""),
-            method: 'GET'
-          });
-        } else {
-          res.setHeader("Location", "http://" + destination[0] + ":" + destination[1] + "/obj/" + fid + path + (opts.query_string || ""));
-          res.writeHead(302, "Found");
-          res.end();
-        }
+  if(!dht) return failDHTNotInitilized(res);
+  dht.getall(fid, function(err, data){
+    if(err) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(500, "Internal Server Error");
+      res.write("Error:\n" + err);
+      res.end();
+    } else if(data === undefined) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(404, "Not Found");
+      res.write("Not Found: no contact to provide the data");
+      res.end();
+      //console.log(dht._routes);
+      //console.log(dht._routes.toString());
+    } else {
+      var availableDestinations = {};
+      for(k in data) {
+        if(!data[k].file_at) continue;
+        var dest = data[k].file_at
+        res.setHeader("X-Available-Location", dest)
+        availableDestinations[k] = dest;
       }
-    });
-  }
+      var destination = random.value(availableDestinations);
+      //console.log(availableDestinations);
+      //console.log(random.key(availableDestinations));
+      kadutprpc.getObject(destination, fid, 3, function(err, reply){
+        if(err) {
+          res.setHeader("Content-Type", "text/plain");
+          res.writeHead(502, "Bad Gateway");
+          res.end("Received error from node " + destination + ":\n" + err.toString());
+        } else {
+          for(h in reply.metadata.headers) {
+            res.setHeader(h, reply.metadata.headers[h]);
+          }
+          console.log(reply);
+          res.end(reply.data);
+        }
+      });
+    }
+  });
 };
 
 var serveFile = function(fid, res, query, opts){
   opts = opts || {}
   var file = storage.filelist[fid];
   if(file) {
+    setHeaders(file.metadata);
+    res.sendfile(file.path);
+    return;
+  }
+  
+  getFile(fid, function(err, data, metadata){
+    if(err) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(err.httpStatus || 500, err.httpStatusText);
+      res.end("Error:\n" + err);
+      return;
+    }
+    if(!data) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(404, "Not Found");
+      res.end("File Not Found");
+      return;
+    }
+    
+    // FIXME: stream data instead of buffering it
+    
+    setHeaders(metadata);
+    res.end(data);
+  });
+  
+  function setHeaders(metadata){
     var heads = {};
-    for(h in file.metadata.headers) {
-      heads[h] = file.metadata.headers[h];
+    for(h in metadata.headers) {
+      heads[h] = metadata.headers[h];
     }
     if(opts.headers) {
       for(h in opts.headers) {
@@ -162,13 +273,8 @@ var serveFile = function(fid, res, query, opts){
     for(h in heads) {
       res.setHeader(h, heads[h]);
     }
-    if(query['content-type']) {
-      res.setHeader('Content-Type', query['content-type']);
-    }
-    res.sendfile(file.path);
-  } else {
-    redirectObjectNotFound(fid, "", res, opts)
-  }  
+    if(query['content-type']) res.setHeader('Content-Type', query['content-type']);
+  }
 };
 
 app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(req, res){
@@ -198,55 +304,57 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
     res.end();
     return;
   }
-  var file = storage.filelist[fid];
-  if(file) {
-    if(!path) {
-      return serveFile(fid, res, req.query, {query_string: query_string});
+  if(!path)
+    return serveFile(fid, res, req.query, {query_string: query_string});
+  
+  getFile(fid, function(err, data, metadata){
+    if(err) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(err.httpStatus || 500, err.httpStatusText);
+      res.end("Error:\n" + err);
+      return;
     }
-    fs.readFile(file.path, function (err, data) {
-      if(err) {
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(500, "Internal Server Error");
-        res.write("Error:\n" + err);
-        return;
-      }
-      var h = new SignedHeader(verifysign);
-      h.parseText(data.toString());
-      ver = parseInt(ver);
-      if(!unsigned) {
-        h.checkHeaders();
-        if(isNaN(ver)) ver = h.getLastSignedSection();
-        res.setHeader("P2PWS-Display-Version", ver);
-        res.setHeader("P2PWS-Version-Check", "signed");
-      } else {
-        res.setHeader("P2PWS-Display-Version", h.getLastUnsignedSection());
-        res.setHeader("P2PWS-Version-Check", "none");
-      }
-      var f = h.getFile(path, isFinite(ver) ? ver : undefined);
-      if(f) {
-        res.setHeader("P2PWS-Blob-Id", f.id);
-        serveFile(f.id, res, req.query, {headers: f.headers, proxy: proxy, query_string: query_string});
-      } else {
-        var ids = h.getSectionsIds(sha1sum);
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(404, "Not Found");
-        var displayVer   = isFinite(ver) ? ver
-                         : unsigned      ? ids.length
-                                         : (ids.length - 1);
-        var displayVerId = unsigned      ? ids.last
-                                         : ids[displayVer];
-        var lastVer      = (ids.last == ids[ids.length - 1]) ? ids.length-1
-                                                             : ids.length;
-        res.end("Not Found: path not registered\n" +
-          "Path: " + path + "\nWebsite: " + fid + "\n" +
-          "Display Version:     #" + displayVer + " " + displayVerId + "\n" +
-          "Last Signed Version: #" + (ids.length - 1) + " " + ids[ids.length-1] + "\n" +
-          "Last Version:        #" + lastVer + " " + ids.last + "\n");
-      }
-    });
-  } else {
-    redirectObjectNotFound(fid, path || "", res, {proxy: proxy, query_string: query_string})
-  }
+    if(!data) {
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(404, "Not Found");
+      res.end("File Not Found");
+      return;
+    }
+    var h = new SignedHeader(verifysign);
+    h.parseText(data);
+    ver = parseInt(ver);
+    if(!unsigned) {
+      h.checkHeaders();
+      if(isNaN(ver)) ver = h.getLastSignedSection();
+      res.setHeader("P2PWS-Display-Version", ver);
+      res.setHeader("P2PWS-Version-Check", "signed");
+    } else {
+      res.setHeader("P2PWS-Display-Version", h.getLastUnsignedSection());
+      res.setHeader("P2PWS-Version-Check", "none");
+    }
+    var f = h.getFile(path, isFinite(ver) ? ver : undefined);
+    if(!f) {
+      var ids = h.getSectionsIds(sha1sum);
+      res.setHeader("Content-Type", "text/plain");
+      res.writeHead(404, "Not Found");
+      var displayVer   = isFinite(ver) ? ver
+                       : unsigned      ? ids.length
+                                       : (ids.length - 1);
+      var displayVerId = unsigned      ? ids.last
+                                       : ids[displayVer];
+      var lastVer      = (ids.last == ids[ids.length - 1]) ? ids.length-1
+                                                           : ids.length;
+      res.end("Not Found: path not registered\n" +
+        "Path: " + path + "\nWebsite: " + fid + "\n" +
+        "Display Version:     #" + displayVer + " " + displayVerId + "\n" +
+        "Last Signed Version: #" + (ids.length - 1) + " " + ids[ids.length-1] + "\n" +
+        "Last Version:        #" + lastVer + " " + ids.last + "\n");
+      return;
+    }
+    
+    res.setHeader("P2PWS-Blob-Id", f.id);
+    serveFile(f.id, res, req.query, {headers: f.headers, proxy: proxy, query_string: query_string});
+  });
 });
 
 websock.connect('/ws/control', function(request, socket){

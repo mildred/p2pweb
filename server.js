@@ -29,8 +29,48 @@ var kad        = require('kademlia-dht');
 var app        = require('./app');
 var utp        = require('utp');
 var http       = require('http');
+var rand       = require('./random');
 var storage    = require('./storage');
 var seedclient = require('./seedclient');
+
+var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num) {
+  num = num || 0;
+  var seeds = dht.getSeeds();
+  var retried = false;
+  if(seeds.length == 0) {
+    console.log("No seeds");
+    return setTimeout(tryAgain, Math.min(num, 5) * 1000);
+  }
+
+  var seed;
+  while(seed === undefined || seed.id == dht.id) {
+    seed = rand.value(seeds);
+  }
+  var endpoint = seed.endpoint;
+  console.log('Request my public URL to ' + endpoint);
+  
+  var retry = setTimeout(tryAgain, 5000);
+  
+  rpc.getPublicURL(endpoint, function(err, myaddr){
+    clearTimeout(retry);
+    if(err) {
+      if(!retried) setTimeout(tryAgain, 0);
+      return;
+    }
+    if(oldaddr != myaddr) callback(myaddr.toString());
+    if(!retried) setTimeout(keepAlive, 20000);
+    
+    function keepAlive(){
+      retried = true;
+      return findIPAddress(rpc, dht, callback, myaddr, num+1);
+    }
+  });
+  
+  function tryAgain(){
+    retried = true;
+    return findIPAddress(rpc, dht, callback, oldaddr, num+1);
+  }
+};
 
 var utpServer = utp.createServer();
 app.kadrpc.setUTP(utpServer);
@@ -50,16 +90,22 @@ utpServer.listen(port, function(){
       } else {
         console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
       }
-      // FIXME: automatically publish keys to new contacts, and republish
-      // regularly
-      for(fid in app.storage.filelist){
-        var keys = app.storage.filelist[fid].ids;
-        for(var i = 0; i < keys.length; i++) {
-          dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
-            if(err) throw err;
-          });
+      findIPAddress(app.kadrpc, dht, function(myaddr){
+        console.log("Found self addr: " + myaddr);
+        // FIXME: automatically publish keys to new contacts, and republish
+        // regularly
+        console.log("Kad: Publish filelist");
+        console.log(app.storage.filelist);
+        for(fid in app.storage.filelist){
+          var keys = app.storage.filelist[fid].ids;
+          for(var i = 0; i < keys.length; i++) {
+            console.log("Store " + keys[i] + " " + dht.id);
+            dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
+              if(err) throw err;
+            });
+          }
         }
-      }
+      });
     });
   });
 });

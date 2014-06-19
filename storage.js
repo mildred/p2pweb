@@ -61,14 +61,13 @@ var addfile = function(file) {
         }
         
         fs.readFile(file + ".meta", function(err, metadata){
-          if(err) return;
           try{
             metadata = JSON.parse(metadata);
           } catch(e){
             metadata = {};
           }
           metadata.headers = metadata.headers || {};
-          
+
           var key = sha1sum(data);
           
           if(isp2pws(metadata.headers)){
