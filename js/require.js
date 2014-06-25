@@ -65,7 +65,7 @@ var cache = new Object();
 var locks = new Object();
 
 function debug(x){
-  /** /
+  /*
   if(typeof x === "string") {
     console.log("require.js: " + x);
   } else {
@@ -111,16 +111,25 @@ function require(identifier, callback){
 
   var descriptor = resolve(identifier);
   var cacheid = '$'+descriptor.id;
+  var frame = cbstack.last_frame;
   
   if (cache[cacheid]) {
     debug("Module already in cache: " + identifier);
-    if(callback) return cache[cacheid].onReady(callback);
+    if(callback) {
+      if(frame) {
+        frame.on_require(identifier);
+        cache[cacheid].onReady(function(){
+          frame.on_load();
+        });
+      }
+      cache[cacheid].onReady(callback);
+      return;
+    }
     if(!cache[cacheid].ready)
       throw new Error("Module " + identifier + " not ready, use a callback");
     return cache[cacheid].exports;
   }
   
-  var frame = cbstack.last_frame;
   if(frame && callback) frame.on_require(identifier);
   
   debug(descriptor.uri + " loading");
@@ -203,7 +212,7 @@ function require(identifier, callback){
     
     module._load_global_module_exports = function(f){
       setup();
-     var res;
+      var res;
       try {
         res = f.apply(module.exports, [window, module, module.exports]);
       } finally {

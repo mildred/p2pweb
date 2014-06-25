@@ -27,6 +27,7 @@ for(var i = 2; i < process.argv.length; i++){
 
 var kad        = require('kademlia-dht');
 var app        = require('./app');
+var rpc        = require('./rpc');
 var utp        = require('utp');
 var http       = require('http');
 var rand       = require('./random');
@@ -83,28 +84,31 @@ utpServer.listen(port, function(){
     }
     app.initDHT(dht);
     console.log("Kad: DHT started");
-    if(seed) console.log("Kad: Bootstrapping with " + seed);
-    dht.bootstrap(seed ? [seed] : [], function(err){
-      if(err) {
-        console.log("Kad: DHT bootstrap error " + err);
-      } else {
-        console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
-      }
-      findIPAddress(app.kadrpc, dht, function(myaddr){
-        console.log("Found self addr: " + myaddr);
-        // FIXME: automatically publish keys to new contacts, and republish
-        // regularly
-        console.log("Kad: Publish filelist");
-        console.log(app.storage.filelist);
-        for(fid in app.storage.filelist){
-          var keys = app.storage.filelist[fid].ids;
-          for(var i = 0; i < keys.length; i++) {
-            console.log("Store " + keys[i] + " " + dht.id);
-            dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
-              if(err) throw err;
-            });
-          }
+    rpc.normalize(seed, function(err, seed2){
+      if(seed2) console.log("Kad: Bootstrapping with " + seed2);
+      if(err)   console.log(err);
+      dht.bootstrap(seed2 ? [seed2] : [], function(err){
+        if(err) {
+          console.log("Kad: DHT bootstrap error " + err);
+        } else {
+          console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
         }
+        findIPAddress(app.kadrpc, dht, function(myaddr){
+          console.log("Found self addr: " + myaddr);
+          // FIXME: automatically publish keys to new contacts, and republish
+          // regularly
+          console.log("Kad: Publish filelist");
+          console.log(app.storage.filelist);
+          for(fid in app.storage.filelist){
+            var keys = app.storage.filelist[fid].ids;
+            for(var i = 0; i < keys.length; i++) {
+              console.log("Store " + keys[i] + " " + dht.id);
+              dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
+                if(err) throw err;
+              });
+            }
+          }
+        });
       });
     });
   });

@@ -166,7 +166,7 @@ var getFile = function(fid, cb){
     console.log("getFile(" + fid + "): network answered");
     
     var availableDestinations = {};
-    for(k in data) {
+    for(var k in data) {
       if(!data[k].file_at) continue;
       availableDestinations[k] = data[k].file_at;
     }

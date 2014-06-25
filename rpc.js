@@ -1,5 +1,6 @@
 
 var kad = require('kademlia-dht');
+var dns = require('dns');
 var util = require('util');
 var events = require('events');
 var UTPMsg = require('./utp_msg');
@@ -28,7 +29,7 @@ RPC.prototype.setUTP = function(utpServer) {
 
   utpServer.on('connection', function(connection){
     
-    var endpoint = self._makeURL({
+    var endpoint = RPC._makeURL({
       protocol: "utp+p2pws",
       host: connection.host,
       port: connection.port
@@ -64,6 +65,7 @@ RPC.prototype.setUTP = function(utpServer) {
         requestObj = JSON.parse(requestBuf.toString(), kad.JSONReviver);
       } catch(e) {
         console.error("RPC: Received request, parse error: " + e.toString());
+        console.error(requestBuf.toString());
         return reply({error: "Request Parse Error: " + e.toString()});
       }
       
@@ -95,7 +97,7 @@ RPC.prototype._handleKadMessage = function(type, endpoint, data) {
   return handler(endpoint, data);
 };
 
-RPC.prototype._parseAddress = function(endpoint) {
+RPC._parseAddress = function(endpoint) {
   var cap = /^([a-z0-9+-]+):\/\/([^:\/]+|\[[^\]+]\]+)(:([0-9]+))?(\/.*)?$/.exec(endpoint);
   if(!cap) return false;
   return {
@@ -111,7 +113,16 @@ RPC.prototype._parseAddress = function(endpoint) {
   };
 };
 
-RPC.prototype._makeURL = function(address) {
+RPC.normalize = function(endpoint, callback) {
+  var elems = RPC._parseAddress(endpoint);
+  dns.lookup(elems.host || '127.0.0.1', function(err, addr, family){
+		if(err) return callback(err);
+		elems.host = addr;
+		return callback(null, RPC._makeURL(elems));
+	});
+}
+
+RPC._makeURL = function(address) {
   var host = address.host.indexOf(':') == -1 ? address.host : "[" + address.host + "]";
   var port = address.port ? ":" + address.port : "";
   var path = address.path || "";
@@ -120,7 +131,7 @@ RPC.prototype._makeURL = function(address) {
 
 RPC.prototype._connect = function(endpoint, data, callback) {
   var self = this;
-  var addr = this._parseAddress(endpoint);
+  var addr = RPC._parseAddress(endpoint);
   if(addr.protocol == "utp+p2pws") {
     var opts = {
       data: data,
@@ -130,7 +141,7 @@ RPC.prototype._connect = function(endpoint, data, callback) {
       return callback(err, conn, addr);
     });
   } else {
-    return callback(new Error("Unknown protocol " + addr.protocol), null, addr);
+    return callback(new Error("Unknown protocol " + addr.protocol + " in " + endpoint), null, addr);
   }
 };
 
@@ -145,6 +156,7 @@ RPC.prototype._sendKad = function(type, endpoint, data, callback) {
 };
 
 RPC.prototype.request = function(endpoint, request, timeout, callback) {
+  if(typeof endpoint != 'string') throw new Error("Invalid endpoint " + endpoint);
   if(typeof timeout == 'function') {
     callback = timeout;
     timeout = undefined;

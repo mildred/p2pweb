@@ -17,9 +17,9 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   var menu_template = pure('ul.menu').compile({
     'li.sitelist': {
       'site<-sites': {
-        'a.edit-link':      "Site #{site.siteKey}",
-        'a.edit-link@href': '#!/site/#{site.pos}',
-        'a.view-link@href': '/obj/#{site.siteKey}/'
+        'a.edit-link':      "Site #{site.title}",
+        'a.edit-link@href': '#!/site/#{site.key}',
+        'a.view-link@href': '/obj/#{site.key}/'
       }
     }
   });
@@ -153,60 +153,18 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   // Model: Site List
   //
 
-  function getSiteList(callback){
+  function getSiteList(){
     var siteList = [];
     try {
       siteList = JSON.parse(localStorage.getItem("P2PWS.siteList")) || [];
     } catch(e) {console.log(e);}
-    for(var i = 0; i < siteList.length; i++) {
-      siteList[i].getSite = function(callback){
-        // FIXME: no this.siteKey but this.site
-        if(this.site && !this.siteKey) {
-          var s = new SignedHeader();
-          s.parseText(this.site);
-          this.siteKey = s.getFirstId(sha1hex);
-        }
-        getBlobNoCache(this.siteKey, function(err, content){
-          if(err) return callback(err);
-          var s = new SignedHeader();
-          s.parseText(content);
-          return callback(null, s);
-        });
-      };
-    }
+    if(siteList instanceof Array) siteList = {};
     return siteList;
   };
 
   function saveSiteList(siteList){
-    var siteList2 = {};
-    for(k in siteList) {
-      siteList2[k] = {
-        siteKey: siteList[k].siteKey,
-        key:     siteList[k].key
-      };
-    }
     localStorage.setItem("P2PWS.siteList", JSON.stringify(siteList))
-    //console.log("save to localStorage");
-    //console.log(siteList);
   }
-
-  function addSiteToList(siteList, site, privateKey, overwrite){
-    for(var i = 0; i < siteList.length; i++){
-      var s = siteList[i];
-      if(s.key == privateKey) {
-        if(overwrite) s.site = site;
-        return i;
-      }
-    }
-    siteList.push({
-      siteKey: site.getFirstId(sha1hex),
-      getSite: function(cb){ return cb(null, site); },
-      key: privateKey
-    });
-    return siteList.length - 1;
-  }
-
-  var siteList = getSiteList();
 
   //
   // Update UI
@@ -214,7 +172,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function updateMenu(){
     document.querySelector("ul.menu").outerHTML = menu_template({
-      sites: siteList // FIXME: fetch sites before, or do we?
+      sites: getSiteList()
     });
   };
 
@@ -415,7 +373,6 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       site.addFile(path, docid, {'content-type': 'text/html; charset=utf-8'});
 
       saveSite(site);
-      saveSiteList(siteList);
       updateMenu();
       updateSite(sitenum, site);
 
@@ -487,6 +444,14 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       }
       var site = new SignedHeader();
       site.parseText(content);
+      
+      var siteList = getSiteList();
+      siteList[siteKey] = siteList[siteKey] || {};
+      siteList[siteKey].key = siteKey;
+      siteList[siteKey].title = site.getLastHeader("Title");
+      saveSiteList(siteList);
+      updateMenu();
+
       callback(site);
     });
   }
@@ -520,163 +485,91 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     var website_id = section.querySelector(".website input");
     var btn_save   = section.querySelector(".btn-save");
     var btn_open   = section.querySelector(".btn-open");
+    var btn_generate = section.querySelector(".btn-generate");
     var btn_ok     = section.querySelector(".btn-ok");
     var span_wid   = section.querySelector(".website span")
     var keylabel   = section.querySelector(".privkey span");
 
     btn_ok.disabled = true;
     btn_save.disabled = true;
-
-    btn_ok.addEventListener('click', Finish);
     
-    console.log(keytools);
     keytools.install_open_key_handler(btn_open, function(err, _, crypt){
-      KeyAvailable(crypt);
+      KeyAvailable(crypt, false);
     });
-    keytools.generate_private_crypt_handler(function(txt){
-      keylabel.textContent = txt;
-    }, KeyAvailable)
-
+    btn_generate.addEventListener('click',
+      keytools.generate_private_crypt_handler(1024, function(txt, crypt){
+        console.log(txt);
+        keylabel.textContent = txt;
+        if(crypt) KeyAvailable(crypt, true);
+      }));
+    
     var crypt;
-    function KeyAvailable(crypt_){
-      crypt = crypt_;
+    var site;
+    var id;
 
-      var site = new SignedHeader();
+    function KeyAvailable(crypt_, generated){
+      crypt = crypt_;
+      site = new SignedHeader();
       site.addHeader("Format", "P2P Website");
       site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       site.addSignature(sign.sign(crypt));
       saveSite(site);
-      var id = site.getFirstId(sha1hex);
+      id = site.getFirstId(sha1hex);
       span_wid.textContent = id;
       
-      btn_save.addEventListener('click', function(){
-        keytools.save_private_crypt_handler(crypt);
-      });
-      btn_ok.addEventListener('click', function(){
-        r.go("#!/site/" + id);
-      });
-
       btn_save.disabled = false;
-      btn_ok.disabled = false;
+      btn_ok.disabled = generated;
     }
 
-    var currentSite;
-    var currentSiteIndex;
-    function SiteIdAvailable(){
-      currentSite = new SignedHeader();
-      currentSite.addHeader("Format", "P2P Website");
-      currentSite.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
-      currentSite.addSignature(sign.sign(crypt));
-      website_id.value = currentSite.getFirstId(sha1hex);
-      saveSite(currentSite);
-      console.log(currentSite);
-      var i = currentSiteIndex = addSiteToList(siteList, currentSite, crypt.getPrivateKey(), false);
-      saveSiteList(siteList);
-      updateMenu();
+    btn_save.addEventListener('click', function(){
+      keytools.save_private_crypt_handler(crypt);
       btn_ok.disabled = false;
-    }
+    });
 
-    function Finish(){
-      window.router.go("#!/site/" + currentSiteIndex);
-    }
+    btn_ok.addEventListener('click', function(){
+      r.go("#!/site/" + id);
+    });
   });
 
   r.on(/^\/site\/([0-9a-fA-F]+)$/, function(req){
     document.querySelectorAll("section.showhide").hide();
     var siteKey = req[1].toLowerCase();
-    if(siteKey.length < 40) {
-      var sitenum = parseInt(req[1]);
-      var site = siteList[sitenum];
-      if(!site) window.router.go("#!/");
-      site.getSite(function(err, s){
-        if(err) {
-          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-          window.router.go("#!/");
-          return;
-        }
-        //console.log(site);
-        updateSite(sitenum, s, site.key);
-        document.querySelectorAll("#section-website-page").hide();
-      });
-    } else {
-      getSiteWithUI(siteKey, function(site){
-        if(!site) return r.go("#!/");
-        updateSite(null, site);
-        document.querySelectorAll("#section-website-page").hide();
-      });
-    }
+    getSiteWithUI(siteKey, function(site){
+      if(!site) return r.go("#!/");
+      updateSite(null, site);
+      document.querySelectorAll("#section-website-page").hide();
+    });
   });
 
   r.on(/^\/site\/([0-9a-fA-F]+)\/newpage$/, function(req){
     document.querySelectorAll("section.showhide").hide();
     var siteKey = req[1].toLowerCase();
-    if(siteKey.length < 40) {
-      var sitenum = parseInt(req[1]);
-      var site = siteList[sitenum];
-      if(!site) r.go("#!/");
-      site.getSite(function(err, s){
-        if(err) {
-          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-          r.go("#!/");
-          return;
-        }
-        updateSite(sitenum, s, site.key);
-        updateSitePageEditor(sitenum, s);
-      });
-    } else {
-      getSiteWithUI(siteKey, function(site){
-        if(!site) return r.go("#!/");
-        updateSite(null, site);
-        updateSitePageEditor(null, site);
-      });
-    }
+    getSiteWithUI(siteKey, function(site){
+      if(!site) return r.go("#!/");
+      updateSite(null, site);
+      updateSitePageEditor(null, site);
+    });
   });
 
   r.on(/^\/site\/([0-9a-fA-F]+)\/page(\/.*)$/, function(req){
     document.querySelectorAll("section.showhide").hide();
     var siteKey = req[1].toLowerCase();
     var path = req[2];
-    if(siteKey.length < 40) {
-      var sitenum = parseInt(req[1]);
-      var site = siteList[sitenum]; // FIXME
-      if(!site) window.router.go("#!/");
-      site.getSite(function(err, s){
-        if(err) {
-          alert("Error reading site " + site.siteKey + "\n" + err.status + " " + err.statusText);
-          window.router.go("#!/");
-          return;
+    getSiteWithUI(siteKey, function(site){
+      if(!site) return r.go("#!/");
+      var pagemetadata = site.getFile(path);
+      updateSite(null, site);
+      getBlobCache(pagemetadata.id, function(err, content){
+        if(err || !content) {
+          alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
+          return r.go("#!/");
         }
-        var pagemetadata = s.getFile(path);
-        updateSite(sitenum, s, site.key);
-        getBlobCache(pagemetadata.id, function(err, content){
-          if(err || !content) {
-            alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
-            window.router.go("#!/");
-            return;
-          }
-          updateSitePageEditor(sitenum, s, {
-            url:  path,
-            body: content
-          });
+        updateSitePageEditor(null, site, {
+          url:  path,
+          body: content
         });
       });
-    } else {
-      getSiteWithUI(siteKey, function(site){
-        if(!site) return r.go("#!/");
-        var pagemetadata = site.getFile(path);
-        updateSite(null, site);
-        getBlobCache(pagemetadata.id, function(err, content){
-          if(err || !content) {
-            alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
-            return r.go("#!/");
-          }
-          updateSitePageEditor(null, site, {
-            url:  path,
-            body: content
-          });
-        });
-      });
-    }
+    });
   });
 
   r.fallback(function(){

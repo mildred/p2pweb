@@ -1,4 +1,3 @@
-var ready = module.wait();
 require(['./filesaver/FileSaver'], function(saveAs){
 
   module.exports = {
@@ -44,31 +43,36 @@ require(['./filesaver/FileSaver'], function(saveAs){
       if(callback) callback();
     },
     
-    generate_private_crypt_handler: function(feedback, callback){
+    generate_private_crypt_handler: function(keylen, callback){
+      if(callback === undefined) {
+        callback = keylen;
+        keylen = undefined;
+      }
+      keylen = keylen || 4096;
       return function () {
+        var crypt = this.crypt = new JSEncrypt({default_key_size: keylen});
         var dt = new Date();
         var time = -(dt.getTime());
-        var textFeedback = 'Generating.';
-        feedback(textFeedback);
+        var textFeedback = 'Generating ' + keylen + ' bytes key.';
+        callback(textFeedback, null);
         var load = setInterval(function () {
+          textFeedback = textFeedback.replace('...', '');
           textFeedback += '.';
-          feedback(textFeedback);
+          callback(textFeedback, null);
         }, 500);
         crypt.getKey(function () {
           clearInterval(load);
+          textFeedback = "Generated";
           dt = new Date();
           time += (dt.getTime());
           if(time > 1000)
-            feedback('Generated in ' + (time / 1000) + ' s');
+            callback('Generated in ' + (time / 1000) + ' s', crypt);
           else
-            feedback('Generated in ' + time + ' ms');
-          callback(crypt);
+            callback('Generated in ' + time + ' ms', crypt);
         });
       };
     }
   };
-  
-  ready(); // FIXME: should not be necessary
 
 });
 
