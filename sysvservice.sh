@@ -46,7 +46,7 @@ status_q(){
 
 start(){
   if ! svok "$dir"; then
-    nohup supervise "$dir" >>/var/log/$sysvservice_name.supervise.log 2>&1 &
+    nohup supervise "$dir" 2>&1 | multilog t /var/log/$sysvservice_name &
     sleep 0.1
   fi
   $svc_up "$dir"
