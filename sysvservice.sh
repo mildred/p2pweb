@@ -195,10 +195,13 @@ case "$command" in
             exit 1
         fi
         ;;
+    install-init.d)
+        ln -s "$zero" "/etc/init.d/$sysvservice_name"
     *)
         echo "Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
         echo "       $0 enable|disable"
         echo "       $0 install-deps"
+        echo "       $0 install-init.d"
         echo "       $0 generate [CONFIG_FILE]"
         exit 2
 esac
