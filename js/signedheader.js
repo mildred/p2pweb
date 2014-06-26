@@ -1,6 +1,10 @@
-var SignedHeader = function(checksign, text){
+var SignedHeader = function(hashFunc, checksign, text, validId){
+  this._hashFunc  = hashFunc;
   this._checksign = checksign;
-  this.parseCheckText(text);
+  this._pubkey    = null;
+  this._firstSignature = null;
+  this._lastSignature  = null;
+  this.parseText(text, validId);
   this.onchange = [];
 };
 
@@ -11,18 +15,17 @@ SignedHeader.prototype.notifyChange = function() {
   }
 }
 
-SignedHeader.prototype.parseCheckText = function (text) {
-  this.parseText(text);
-  return this.checkHeaders();
-}
-
-SignedHeader.prototype.parseText = function (text) {
+SignedHeader.prototype.parseText = function (text, validId) {
   if(text === undefined) text = "";
   this.text = text;
   var h = text.split("\n");
   var sectionnum = 0;
   
   this.headers = [{name: null, value: "", text: "", section: sectionnum}];
+  
+  //
+  // Parse text
+  //
 
   for(var i = 0, j = 1; i < h.length; i++) {
     var n = h[i].indexOf(": ");
@@ -55,11 +58,95 @@ SignedHeader.prototype.parseText = function (text) {
       if(!last) this.headers[j-1].text += "\n";
     }
   }
+  
+  //
+  // Compute hash, signatures and linked list of signatures
+  //
+  
+  var text = "";
+  this._pubkey = undefined;
+  this._firstSignature = null;
+  this._lastSignature  = null;
+  for(var i = 0; i < this.headers.length; i++) {
+    var h = this.headers[i];
+    if(h.name == "PublicKey" && !this._pubkey) {
+      this._pubkey = h.value;
+    }
+    if(h.name == "Signature") {
+      h.valid = this._pubkey && this._checksign(text, h.value, this._pubkey);
+    }
+    text += h.text;
+    if(h.name == "Signature") {
+      h.hashId = this._hashFunc(text);
+      if(this._firstSignature === null)
+        this._firstSignature = i;
+      if(this._lastSignature !== null)
+        this.headers[this._lastSignature].nextSignature = i;
+      h.prevSignature = this._lastSignature;
+      h.nextSignature = null;
+      this._lastSignature = i;
+    }
+  }
+  
+  //
+  // Mark valid headers
+  //
+  
+  this.markValid(validId);
+
+  //
+  // The end
+  //
+  
   this.notifyChange();
 }
 
-SignedHeader.prototype.checkHeaders = function (checksign, truncate, callbacksection) {
-  checksign = checksign || this._checksign;
+SignedHeader.prototype.markValid = function (validId) {
+  var i;
+  if(this._hashFunc(this.text) == validId || validId === true) {
+    i = this.headers.length - 1;
+  } else {
+    i = this._lastSignature;
+    while(validId && i !== null) {
+      var h = this.headers[i];
+      if(h.valid) break;
+      if(h.hashId == validId) break;
+      i = h.prevSignature;
+    }
+  }
+  while(i >= 0) {
+    this.headers[i--].valid = true;
+  }
+}
+
+SignedHeader.prototype.truncate = function () {
+  var oldHeaders = this.headers
+  var changed = false;
+  this.headers = [];
+  this._firstSignature = null;
+  this._lastSignature  = null;
+  for(var i = 0; i < oldHeaders.length; ++i) {
+    var h = oldHeaders[i];
+    if(!h.valid) {
+      changed = true;
+      break;
+    }
+    if(h.name == 'Signature') {
+      if(this._firstSignature === null) {
+        this._firstSignature = i;
+      }
+      this._lastSignature = i;
+      if(h.nextSignature !== null && !oldHeaders[h.nextSignature].valid) {
+        h.nextSignature = null;
+      }
+    }
+    this.headers.push(h);
+  }
+  this._recomputeText();
+  if(changed) this.notifyChange();
+}
+
+SignedHeader.prototype.checkHeaders = function (truncate) {
   truncate = (truncate === undefined) ? true : truncate;
   var txt = "";
   var validtxt = "";
@@ -73,7 +160,7 @@ SignedHeader.prototype.checkHeaders = function (checksign, truncate, callbacksec
       pubkey = h.value;
     }
     if(h.name == "Signature") {
-      checked = (pubkey !== undefined) && checksign(txt, h.value, pubkey);
+      checked = (pubkey !== undefined) && this._checksign(txt, h.value, pubkey);
     }
     if(checked !== false) {
       txt += h.text;
@@ -85,7 +172,6 @@ SignedHeader.prototype.checkHeaders = function (checksign, truncate, callbacksec
         validheads = [];
         for(var j = 0; j < heads.length; j++) validheads.push(heads[j]);
       }
-      if(callbacksection) callbacksection(txt, heads);
     }
   }
   this.text    = truncate ? validtxt   : txt;
@@ -111,30 +197,20 @@ SignedHeader.prototype.getLastUnsignedSection = function () {
   return h.section;
 }
 
-SignedHeader.prototype.getSectionsIds = function (hashFunc) {
+SignedHeader.prototype.getSectionsIds = function () {
+  var i = this._firstSignature;
   var ids = [];
-  var text = "";
-  var finished = false;
-  for(var i = 0; i < this.headers.length; i++) {
+  while(i !== null) {
     var h = this.headers[i];
-    text += h.text;
-    if(h.name == "Signature") {
-      var h = hashFunc(text);
-      if(h) ids.push(h);
-      finished = true;
-    }
+    ids.push(h.hashId);
   }
-  var h = hashFunc(text);
-  if(h) ids.last = h;
+  ids.last = this._hashFunc(this.text);
   return ids;
 }
 
-SignedHeader.prototype.getFirstId = function(hashFunc){
-  var text = "";
-  for(var i = 0; i < this.headers.length; i++) {
-    var h = this.headers[i];
-    text += h.text;
-    if(h.name == "Signature") return hashFunc(text);
+SignedHeader.prototype.getFirstId = function (){
+  if(this._firstSignature) {
+    return this.headers[this._firstSignature].hashId;
   }
   return undefined;
 };
@@ -161,12 +237,25 @@ SignedHeader.prototype.addHeader = function (name, value) {
   var text = name + ": " + this._escapeValue(value) + "\n";
   this.text += text;
   var lasthead = this.headers[this.headers.last - 1] || {section: 0};
-  this.headers.push({
-    name: name,
-    text: text,
-    value: value,
-    section: lasthead.section + ((lasthead.name == "Signature") ? 1 : 0)
-  });
+  var h = {
+    name:    name,
+    text:    text,
+    value:   value,
+    section: lasthead.section + ((lasthead.name == "Signature") ? 1 : 0),
+    valid:   true
+  };
+  if(name == "Signature") {
+    h.hashId = this._hashFunc(this.text);
+    var i = this.headers.length;
+    if(this._firstSignature === null)
+      this._firstSignature = i;
+    if(this._lastSignature !== null)
+      this.headers[this._lastSignature].nextSignature = i;
+    h.prevSignature = this._lastSignature;
+    h.nextSignature = null;
+    this._lastSignature = i;
+  }
+  this.headers.push(h);
   this.notifyChange();
 }
 
@@ -203,6 +292,7 @@ SignedHeader.prototype.getUnsignedHeader = function(name) {
 }
 
 SignedHeader.prototype.setUnsignedHeader = function (name, value) {
+  if(name == "Signature") throw new Error("setUnsignedHeader(Signature, ...)");
   value = this._fixValue(value);
   for(var i = this.headers.length - 1; i >= 0; i--) {
     var h = this.headers[i];

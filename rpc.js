@@ -114,6 +114,7 @@ RPC._parseAddress = function(endpoint) {
 };
 
 RPC.normalize = function(endpoint, callback) {
+  if(!endpoint) return callback(null, endpoint);
   var elems = RPC._parseAddress(endpoint);
   dns.lookup(elems.host || '127.0.0.1', function(err, addr, family){
 		if(err) return callback(err);
@@ -123,6 +124,7 @@ RPC.normalize = function(endpoint, callback) {
 }
 
 RPC._makeURL = function(address) {
+  console.trace(address);
   var host = address.host.indexOf(':') == -1 ? address.host : "[" + address.host + "]";
   var port = address.port ? ":" + address.port : "";
   var path = address.path || "";

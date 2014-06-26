@@ -83,7 +83,6 @@ utpServer.listen(port, function(){
       return console.log("Kad: DHT error: " + err);
     }
     app.initDHT(dht);
-    console.log("Kad: DHT started");
     rpc.normalize(seed, function(err, seed2){
       if(seed2) console.log("Kad: Bootstrapping with " + seed2);
       if(err)   console.log(err);

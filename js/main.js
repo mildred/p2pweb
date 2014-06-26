@@ -28,6 +28,17 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     '.meta .revision':         "lastSignedSection",
     '.meta .key':              "siteKey",
     'input[name=title]@value': "title",
+    'li.revitem': {
+      'rev<-revisions': {
+        'span.rev-num': 'rev.num',
+        'span.rev-key': 'rev.key',
+        'a.lnk-rev-view-site@href': function(a){
+          var key = a.item.signed ? this.siteKey : a.item.key;
+          return '/obj/' + key + ',' + a.item.num + '/';
+        }
+      }
+    },
+    'a.lnk-view-source@href': "/obj/#{siteKey}?content-type=text/plain",
     'li.newpage a@href': '#!/site/#{siteId}/newpage',
     'li.pageitem': {
       'page<-pages': {
@@ -180,9 +191,15 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
-    var siteKey = site.getFirstId(sha1hex);
+    var siteKey = site.getFirstId();
     var siteTitle = site.getLastHeader("Title");
     var pageArray = [];
+    var i = 0;
+    var siteSectionIds = site.getSectionsIds();
+    var revArray = siteSectionIds.map(function(e){
+      return {key: e, signed: true, num: i++};
+    });
+    revArray.push({key: siteSectionIds.last, signed: false, num: i});
     if(!privateKey) privateKey = privateKeyStore[siteKey];
     for(path in pages) {
       pages[path].path = path;
@@ -194,6 +211,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       siteKey: siteKey,
       siteId: sitenum || siteKey,
       pages: pageArray,
+      revisions: revArray,
       lastSignedSection: site.getLastSignedSection()
     });
 
@@ -256,7 +274,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   }
 
   function updateSitePageEditor(sitenum, site, existingContent){
-    var siteKey = site.getFirstId(sha1hex);
+    var siteKey = site.getFirstId();
     existingContent = existingContent || {};
     parseMetaData(existingContent);
     var newpage = !existingContent.url;
@@ -426,7 +444,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function saveSite(site){
     //console.log(site);
-    sendBlob(site.text, site.getFirstId(sha1hex), "application/vnd.p2pws", function(r, id){
+    sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
       if(r) {
         console.error(r.status + ' ' + r.statusText);
         alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText);
@@ -443,7 +461,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         return callback();
       }
       var site = new SignedHeader();
-      site.parseText(content);
+      site.parseText(content, siteKey);
       
       var siteList = getSiteList();
       siteList[siteKey] = siteList[siteKey] || {};
@@ -514,7 +532,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       site.addSignature(sign.sign(crypt));
       saveSite(site);
-      id = site.getFirstId(sha1hex);
+      id = site.getFirstId();
       span_wid.textContent = id;
       
       btn_save.disabled = false;

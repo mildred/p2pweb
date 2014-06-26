@@ -163,7 +163,7 @@ var getFile = function(fid, cb){
       console.log("getFile(" + fid + "): no data");
       return cb();
     }
-    console.log("getFile(" + fid + "): network answered");
+    console.log("getFile(" + fid + "): network answered " + JSON.stringify(data));
     
     var availableDestinations = {};
     for(var k in data) {
@@ -171,6 +171,7 @@ var getFile = function(fid, cb){
       availableDestinations[k] = data[k].file_at;
     }
     var destination = random.value(availableDestinations);
+    console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
 
     kadutprpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
       if(err) {
@@ -320,11 +321,11 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
       res.end("File Not Found");
       return;
     }
-    var h = new SignedHeader(verifysign);
-    h.parseText(data);
+    var h = new SignedHeader(sha1sum, verifysign);
+    h.parseText(data, fid);
     ver = parseInt(ver);
     if(!unsigned) {
-      h.checkHeaders();
+      h.truncate();
       if(isNaN(ver)) ver = h.getLastSignedSection();
       res.setHeader("P2PWS-Display-Version", ver);
       res.setHeader("P2PWS-Version-Check", "signed");
@@ -334,7 +335,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
     }
     var f = h.getFile(path, isFinite(ver) ? ver : undefined);
     if(!f) {
-      var ids = h.getSectionsIds(sha1sum);
+      var ids = h.getSectionsIds();
       res.setHeader("Content-Type", "text/plain");
       res.writeHead(404, "Not Found");
       var displayVer   = isFinite(ver) ? ver
