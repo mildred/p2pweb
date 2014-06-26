@@ -46,7 +46,7 @@ status_q(){
 
 start(){
   if ! svok "$dir"; then
-    nohup supervise "$dir" 2>&1 | multilog t /var/log/$sysvservice_name &
+    nohup supervise "$dir" &
     sleep 0.1
   fi
   $svc_up "$dir"
@@ -178,7 +178,8 @@ case "$command" in
           path="`readlink -f "$0"`"
         fi
         cd "`dirname "$path"`"
-        exec $sysvservice_exec
+        mkdir -p /var/log/$sysvservice_name
+        exec $sysvservice_exec 2>&1 | multilog t /var/log/$sysvservice_name
         ;;
     install-deps)
         if which apt-get >/dev/null 2>&1; then
