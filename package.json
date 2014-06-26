@@ -11,9 +11,7 @@
     "freeice": "*",
     "weld": "*",
     "tinymce": "*",
-    "jsencrypt": "git://github.com/travist/jsencrypt.git"
-  },
-  "disabled-dependencies": {
+    "jsencrypt": "git://github.com/travist/jsencrypt.git",
     "utp": "git://github.com/mildred/utp.git",
     "websocket": "git://github.com/mildred/WebSocket-Node.git",
     "vs-stun": "git://github.com/mildred/vs-stun.git",
