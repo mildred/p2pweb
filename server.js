@@ -55,7 +55,7 @@ var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num) {
   rpc.getPublicURL(endpoint, function(err, myaddr){
     clearTimeout(retry);
     if(err) {
-      if(!retried) setTimeout(tryAgain, 0);
+      if(!retried) setTimeout(tryAgain, 0.5);
       return;
     }
     if(oldaddr != myaddr) callback(myaddr.toString());
