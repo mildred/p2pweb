@@ -197,6 +197,7 @@ case "$command" in
         ;;
     install-init.d)
         ln -s "$zero" "/etc/init.d/$sysvservice_name"
+        ;;
     *)
         echo "Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
         echo "       $0 enable|disable"
