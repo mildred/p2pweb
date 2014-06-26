@@ -34,8 +34,9 @@ var rand       = require('./random');
 var storage    = require('./storage');
 var seedclient = require('./seedclient');
 
-var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num) {
+var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num, timeout) {
   num = num || 0;
+  timeout = timeout || 5000;
   var seeds = dht.getSeeds();
   var retried = false;
   if(seeds.length == 0) {
@@ -50,12 +51,12 @@ var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num) {
   var endpoint = seed.endpoint;
   console.log('Request my public URL to ' + endpoint);
   
-  var retry = setTimeout(tryAgain, 5000);
+  var retry = setTimeout(tryAgain, timeout);
   
   rpc.getPublicURL(endpoint, function(err, myaddr){
     clearTimeout(retry);
     if(err) {
-      if(!retried) setTimeout(tryAgain, 0.5);
+      if(!retried) setTimeout(tryAgain, 500);
       return;
     }
     if(oldaddr != myaddr) callback(myaddr.toString());
@@ -69,7 +70,7 @@ var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num) {
   
   function tryAgain(){
     retried = true;
-    return findIPAddress(rpc, dht, callback, oldaddr, num+1);
+    return findIPAddress(rpc, dht, callback, oldaddr, num+1, 500);
   }
 };
 
