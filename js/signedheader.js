@@ -198,20 +198,14 @@ SignedHeader.prototype.getLastUnsignedSection = function () {
 }
 
 SignedHeader.prototype.getSectionsIds = function () {
+  var i = this._firstSignature;
   var ids = [];
-  var text = "";
-  var finished = false;
-  for(var i = 0; i < this.headers.length; i++) {
+  while(i !== null && i < this.headers.length) {
     var h = this.headers[i];
-    text += h.text;
-    if(h.name == "Signature") {
-      var h = this._hashFunc(text);
-      if(h) ids.push(h);
-      finished = true;
-    }
+    ids.push(h.hashId);
+    i = h.nextSignature;
   }
-  var h = this._hashFunc(text);
-  if(h) ids.last = h;
+  ids.last = this._hashFunc(this.text);
   return ids;
 }
 
