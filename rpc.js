@@ -28,14 +28,12 @@ RPC.prototype.setUTP = function(utpServer) {
   };
 
   utpServer.on('connection', function(connection){
-
+    
     var endpoint = RPC._makeURL({
       protocol: "utp+p2pws",
       host: connection.host,
       port: connection.port
     });
-    
-    console.log("receive connection from " + endpoint);
     
     var request = [];
     
@@ -70,8 +68,6 @@ RPC.prototype.setUTP = function(utpServer) {
         console.error(requestBuf.toString());
         return reply({error: "Request Parse Error: " + e.toString()});
       }
-      
-      console.log("receive request: " + JSON.stringify(requestObj));
       
       if(requestObj.request == 'kademlia') {
         return reply({ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)});
@@ -171,8 +167,6 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
   var timeoutId;
   if(timeout) timeoutId = setTimeout(onTimeOut, timeout * 1000);
   
-  console.log("RPC: Request " + endpoint + " " + JSON.stringify(request));
-  
   this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
     if(timeoutId) clearTimeout(timeoutId);
     if(timedOut)  return;
@@ -184,14 +178,11 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
     var response = [];
     
     utp.on('data', function(resdata){
-      console.log("RPC: Request " + endpoint + " " + JSON.stringify(request) + " got data " + resdata.length);
       response.push(resdata);
     });
     
     utp.on('end', function(){
       response = Buffer.concat(response);
-      
-      console.log("RPC: Request " + endpoint + " " + JSON.stringify(request) + " responded " + response.length);
       
       try {
         response = JSON.parse(response.toString(), kad.JSONReviver);
