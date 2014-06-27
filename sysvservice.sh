@@ -34,15 +34,17 @@ init_rundir(){
   fi
 }
 
-status(){
-  svstat "$dir"
-  svok "$dir" && [ up = $(svstat "$dir" | sed -r 's/^.*:\s+(\S*)\s+.*$/\1/') ]
+status_q(){
+  svok "$dir"     && [ up = $(svstat "$dir"     | sed -r 's/^.*:\s+(\S*)\s+.*$/\1/') ] && \
+  svok "$dir/log" && [ up = $(svstat "$dir/log" | sed -r 's/^.*:\s+(\S*)\s+.*$/\1/') ]
   return $?
 }
 
-status_q(){
-  status >/dev/null 2>/dev/null
-  svok "$dir"
+status(){
+  svstat "$dir"
+  svstat "$dir/log"
+  status_q
+  return $?
 }
 
 start(){
@@ -58,6 +60,7 @@ start(){
     nohup supervise "$dir/log" <"$dir/log.pipe" 2>&1 | logger -p crit.daemon -t "$sysvservice_name.log" &
     sleep 0.1
   fi
+  svc -u "$dir/log"
   if $sysvservice_once; then
     svc -o "$dir"
   else
@@ -67,6 +70,7 @@ start(){
 
 stop(){
   svc -d "$dir"
+  svc -d "$dir/log"
 }
 
 restart(){
