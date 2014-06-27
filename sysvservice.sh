@@ -57,7 +57,7 @@ start(){
     sleep 0.1
   fi
   if [ -d "$dir/log" ] && ! svok "$dir/log"; then
-    nohup supervise "$dir/log" <"$dir/log.pipe" 2>&1 | logger -p crit.daemon -t "$sysvservice_name.log" &
+    nohup supervise "$dir/log" <"$dir/log.pipe" 2>&1 | logger -p daemon.crit -t "$sysvservice_name.log" &
     sleep 0.1
   fi
   svc -u "$dir/log"
