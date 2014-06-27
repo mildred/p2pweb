@@ -46,8 +46,16 @@ status_q(){
 }
 
 start(){
+  if ! [ -p "$dir/log.pipe" ]; then
+    rm -f "$dir/log.pipe"
+    mkfifo "$dir/log.pipe"
+  fi
   if ! svok "$dir"; then
-    nohup supervise "$dir" &
+    nohup supervise "$dir" </dev/null >"$dir/log.pipe" 2>&1 &
+    sleep 0.1
+  fi
+  if [ -d "$dir/log" ] && ! svok "$dir/log"; then
+    nohup supervise "$dir/log" <"$dir/log.pipe" 2>&1 | logger -p crit.daemon -t "$sysvservice_name.log" &
     sleep 0.1
   fi
   if $sysvservice_once; then
@@ -96,11 +104,11 @@ _realpath(){
 }
 
 if [ -d /run ]; then
-  dir="/run/$sysvservice_name"
+  rundir="/run"
 else
-  dir="/var/run/$sysvservice_name"
+  rundir="/var/run"
 fi
-dir="`_realpath "$dir"`"
+dir="`_realpath "$rundir/$sysvservice_name"`"
 zero="`_realpath "$0"`"
 runcmd="$(cd -P "$(dirname "$0")"; echo "$PWD/$(basename "$0")")"
 command="$1"
