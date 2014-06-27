@@ -13,8 +13,12 @@ function RPC(){
   this._utpConnections = {};
 }
 
-RPC._debug = function(msg){
+RPC._debugc = function(msg){
   console.log("RPC: " + msg);
+}
+
+RPC._debugs = function(msg){
+  //console.log("RPC: " + msg);
 }
 
 util.inherits(RPC, events.EventEmitter);
@@ -74,16 +78,16 @@ RPC.prototype.setUTP = function(utpServer) {
       }
       
       if(requestObj.request == 'kademlia') {
-        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(requestObj.data));
+        RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(requestObj.data));
         var response = {ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)};
-        RPC._debug("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(response.ok));
-        return reply();
+        RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(response.ok));
+        return reply(response);
       }
         
       if(requestObj.request == 'object') {
-        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
+        RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
         self._getObject(requestObj.fid, function(err, data){
-          RPC._debug("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + data.length);
+          RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + data.length);
           if(err) return reply({error: err.toString()});
           reply({ok: data});
         });
@@ -91,7 +95,7 @@ RPC.prototype.setUTP = function(utpServer) {
       }
 
       if(requestObj.request == 'publicURL') {
-        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + ": respond " + endpoint);
+        RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + ": respond " + endpoint);
         return reply({ok: endpoint});
       }
 
@@ -183,7 +187,7 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
     (request.request == "object")   ? ("/" + request.fid)  :
     "";
   
-  RPC._debug("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
+  RPC._debugc("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
   
   this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
     if(timeoutId) clearTimeout(timeoutId);
@@ -200,12 +204,13 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
     });
     
     utp.on('end', function(){
-      response = Buffer.concat(response);
-      
+      var resBuffer = Buffer.concat(response);
+  
       try {
-        response = JSON.parse(response.toString(), kad.JSONReviver);
+        response = JSON.parse(resBuffer.toString(), kad.JSONReviver);
       } catch(e) {
-        console.error("RPC: Cannot parse response: " + e);
+        console.error("RPC: Cannot parse response for " + requestURL + ": " + e);
+        console.error("RPC: Received " + resBuffer.length + " bytes: " + resBuffer.toString());
         return callback(new Error("Invalid response: " + e));
       }
       
@@ -220,7 +225,7 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
         return callback(new Error(e));
       }
       
-      RPC._debug("Receive Response: " + requestURL + ": " + JSON.stringify(response.ok));
+      RPC._debugc("Receive Response: " + requestURL + ": " + JSON.stringify(response.ok));
       
       callback(null, response.ok);
     });

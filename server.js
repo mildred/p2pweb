@@ -1,30 +1,5 @@
 #!/usr/bin/env node
 
-var port = 1337;
-var datadir = __dirname + "/data";
-var seedurl = 'ws://perrin.mildred.fr:81/ws/p2pwebseeds';
-var seed = null;
-
-for(var i = 2; i < process.argv.length; i++){
-  var arg = process.argv[i];
-  if(arg == "-port") {
-    port = parseInt(process.argv[++i]);
-  } else if(arg == "-data") {
-    datadir = process.argv[++i];
-  } else if(arg == "-seedurl") {
-    seedurl = process.argv[++i];
-  } else if(arg == "-seed") {
-    seed = process.argv[++i];
-  } else if(parseInt(arg)) {
-    port = parseInt(arg);
-  } else {
-    if(arg != "-help") console.log("Unknown argument " + arg);
-    console.log(process.argv[1] + " [-port PORTNUM] [-data DATADIR] [-seedurl WEBSOCKET] [PORTNUM]");
-    console.log(process.argv[1] + " -help");
-    return;
-  }
-}
-
 var kad        = require('kademlia-dht');
 var app        = require('./app');
 var rpc        = require('./rpc');
@@ -33,6 +8,53 @@ var http       = require('http');
 var rand       = require('./random');
 var storage    = require('./storage');
 var seedclient = require('./seedclient');
+
+var port = 1337;
+var datadir = __dirname + "/data";
+var seeds = [];
+var pendingseeds = 0;
+var seedcallback;
+
+for(var i = 2; i < process.argv.length; i++){
+  var arg = process.argv[i];
+  if(arg == "-port") {
+    port = parseInt(process.argv[++i]);
+  } else if(arg == "-data") {
+    datadir = process.argv[++i];
+  } else if(arg == "-seedlist") {
+    throw new Error("-seedlist not implemented");
+  } else if(arg == "-seed") {
+    addSeed(process.argv[++i]);
+  } else if(parseInt(arg)) {
+    port = parseInt(arg);
+  } else {
+    if(arg != "-help") console.log("Unknown argument " + arg);
+    console.log(process.argv[1] + " [-port PORTNUM] [-data DATADIR] [-seed URL] [-seedlist FILE] [PORTNUM]");
+    console.log(process.argv[1] + " -help");
+    return;
+  }
+}
+
+
+
+function addSeed(s) {
+  pendingseeds++;
+  rpc.normalize(s, function(err, seed2){
+    if(err)   console.log(err);
+    if(seed2) seeds.push(seed2);
+    pendingseeds--;
+    if(pendingseeds == 0 && seedcallback) {
+      seedcallback(seeds);
+    }
+  });
+}
+
+function registerSeedCallback(cb){
+  seedcallback = cb;
+  if(pendingseeds == 0) {
+    cb(seeds);
+  }
+}
 
 var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num, timeout) {
   num = num || 0;
@@ -84,10 +106,9 @@ utpServer.listen(port, function(){
       return console.log("Kad: DHT error: " + err);
     }
     app.initDHT(dht);
-    rpc.normalize(seed, function(err, seed2){
-      if(seed2) console.log("Kad: Bootstrapping with " + seed2);
-      if(err)   console.log(err);
-      dht.bootstrap(seed2 ? [seed2] : [], function(err){
+    registerSeedCallback(function(seeds){
+      console.log("Kad: Bootstrapping with " + seeds);
+      dht.bootstrap(seeds, function(err){
         if(err) {
           console.log("Kad: DHT bootstrap error " + err);
         } else {
@@ -101,7 +122,7 @@ utpServer.listen(port, function(){
             var keys = app.storage.filelist[fid].ids;
             for(var i = 0; i < keys.length; i++) {
               console.log("Store " + keys[i] + " " + dht.id);
-              dht.multiset(keys[i], dht.id.toString(), {file_at: myaddr}, function(err){
+              dht.multiset(kad.Id.fromHex(keys[i]), dht.id.toString(), {file_at: myaddr}, function(err){
                 if(err) throw err;
               });
             }

@@ -1,4 +1,5 @@
 var fs      = require('fs');
+var kad     = require('kademlia-dht');
 var http    = require('http');
 var random  = require('./random');
 var express = require('express');
@@ -153,7 +154,7 @@ var getFile = function(fid, cb){
   }
   
   console.log("getFile(" + fid + "): ask the network");
-  dht.getall(fid, function(err, data){
+  dht.getall(kad.Id.fromHex(fid), function(err, data){
     if(err) {
       console.log("getFile(" + fid + "): " + err.toString());
       err.httpStatus = 500;
@@ -191,7 +192,7 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
   res.setHeader("X-File-ID", fid)
   if(path != "") res.setHeader("X-File-Path", path)
   if(!dht) return failDHTNotInitilized(res);
-  dht.getall(fid, function(err, data){
+  dht.getall(kad.Id.fromHex(fid), function(err, data){
     if(err) {
       res.setHeader("Content-Type", "text/plain");
       res.writeHead(500, "Internal Server Error");
