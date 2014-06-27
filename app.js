@@ -325,7 +325,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
     h.parseText(data, fid);
     ver = parseInt(ver);
     if(!unsigned) {
-      h.checkHeaders();
+      h.truncate();
       if(isNaN(ver)) ver = h.getLastSignedSection();
       res.setHeader("P2PWS-Display-Version", ver);
       res.setHeader("P2PWS-Version-Check", "signed");

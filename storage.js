@@ -120,7 +120,7 @@ var create = function(fid, req, callback){
         if(is_p2pws){
           var h = new SignedHeader(sha1sum, verifysign);
           h.parseText(Buffer.concat(data).toString());
-          h.checkHeaders();
+          h.truncate();
           real_fid = h.getFirstId();
           all_ids = h.getSectionsIds();
         }

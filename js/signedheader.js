@@ -146,40 +146,6 @@ SignedHeader.prototype.truncate = function () {
   if(changed) this.notifyChange();
 }
 
-SignedHeader.prototype.checkHeaders = function (truncate) {
-  truncate = (truncate === undefined) ? true : truncate;
-  var txt = "";
-  var validtxt = "";
-  var heads = [];
-  var validheads = [];
-  var checked = null;
-  var pubkey;
-  for(var i = 0; i < this.headers.length && checked !== false; i++) {
-    var h = this.headers[i];
-    if(h.name == "PublicKey" && pubkey === undefined) {
-      pubkey = h.value;
-    }
-    if(h.name == "Signature") {
-      checked = (pubkey !== undefined) && this._checksign(txt, h.value, pubkey);
-    }
-    if(checked !== false) {
-      txt += h.text;
-      heads.push(h);
-    }
-    if(h.name == "Signature") {
-      if(checked) {
-        validtxt = txt;
-        validheads = [];
-        for(var j = 0; j < heads.length; j++) validheads.push(heads[j]);
-      }
-    }
-  }
-  this.text    = truncate ? validtxt   : txt;
-  this.headers = truncate ? validheads : heads;
-  if(txt != validtxt) this.notifyChange();
-  return checked;
-};
-
 SignedHeader.prototype.getLastSignedSection = function () {
   var h = this.getLastHeader() || {section: 0};
   if(h.name == "Signature") return h.section;
