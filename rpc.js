@@ -123,6 +123,7 @@ RPC.normalize = function(endpoint, callback) {
 }
 
 RPC._makeURL = function(address) {
+  console.trace(address);
   var host = address.host.indexOf(':') == -1 ? address.host : "[" + address.host + "]";
   var port = address.port ? ":" + address.port : "";
   var path = address.path || "";

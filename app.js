@@ -163,7 +163,7 @@ var getFile = function(fid, cb){
       console.log("getFile(" + fid + "): no data");
       return cb();
     }
-    console.log("getFile(" + fid + "): network answered");
+    console.log("getFile(" + fid + "): network answered " + JSON.stringify(data));
     
     var availableDestinations = {};
     for(var k in data) {
@@ -171,6 +171,7 @@ var getFile = function(fid, cb){
       availableDestinations[k] = data[k].file_at;
     }
     var destination = random.value(availableDestinations);
+    console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
 
     kadutprpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
       if(err) {
