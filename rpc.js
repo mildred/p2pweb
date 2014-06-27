@@ -114,6 +114,7 @@ RPC._parseAddress = function(endpoint) {
 };
 
 RPC.normalize = function(endpoint, callback) {
+  if(!endpoint) return callback(null, endpoint);
   var elems = RPC._parseAddress(endpoint);
   dns.lookup(elems.host || '127.0.0.1', function(err, addr, family){
 		if(err) return callback(err);
