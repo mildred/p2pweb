@@ -17,19 +17,20 @@ sysvservice_once=false
 
 if [ "$sysvservice_nested" != true ]; then
 
-dir="/var/run/$sysvservice_name"
-if $sysvservice_once; then
-  svc_up="svc -o"
-else
-  svc_up="svc -u"
-fi
-
 init_rundir(){
   if ! [ -e "$dir" ]; then
     mkdir "$dir"
+    chmod 1755 "$dir"
     rm -f "$dir/run"
     # Avoid noexec restriction in $dir
     ln -sf "/etc/init.d/$sysvservice_name" "$dir/run"
+  fi
+  if ! [ -e "$dir/log" ]; then
+    mkdir "$dir/log"
+    chmod 1755 "$dir/log"
+    rm -f "$dir/log/run"
+    # Avoid noexec restriction in $dir
+    ln -sf "/etc/init.d/$sysvservice_name" "$dir/log/run"
   fi
 }
 
@@ -49,7 +50,11 @@ start(){
     nohup supervise "$dir" &
     sleep 0.1
   fi
-  $svc_up "$dir"
+  if $sysvservice_once; then
+    svc -o "$dir"
+  else
+    svc -u "$dir"
+  fi
 }
 
 stop(){
@@ -73,13 +78,37 @@ sh_esc(){
   printf "'%s'" "$(printf %s "$1" | sed "s/'/'\"'\"'/g")"
 }
 
-command="$1"
-zero="$(cd "$(dirname "$0")"; echo "$PWD/$(basename "$0")")"
-if [ -e "$dir" ]; then
-  zero2="$(cd "$dir"; echo "$PWD")/run"
-  if [ "a${zero#/var}" = "a${zero2#/var}" ]; then
-    command="_exec"
+_realpath(){
+  if which realpath >/dev/null 2>&1; then
+    realpath "$1"
+  elif which python >/dev/null 2>&1; then
+    python -c 'import sys, os.path; print(os.path.realpath(sys.argv[1]))' "$1"
+  elif which greadlink >/dev/null 2>&1; then
+    greadlink -f "$1"
+  elif (readlink --version | grep "GNU coreutils") >/dev/null 2>&1; then
+    readlink -f "$1"
+  elif [ -d "$1" ]; then
+    (cd -P "$1"; echo "$PWD")
+  else
+    # Incomplete as basename could be symbolic link and would not be followed
+    (cd -P "`dirname "$1"`"; echo "$PWD/`basename "$1"`")
   fi
+}
+
+if [ -d /run ]; then
+  dir="/run/$sysvservice_name"
+else
+  dir="/var/run/$sysvservice_name"
+fi
+dir="`_realpath "$dir"`"
+zero="`_realpath "$0"`"
+runcmd="$(cd -P "$(dirname "$0")"; echo "$PWD/$(basename "$0")")"
+command="$1"
+
+if [ "a$runcmd" = "a$dir/run" ]; then
+  command="_exec"
+elif [ "a$runcmd" = "a$dir/log/run" ]; then
+  command="_exec_log"
 fi
 
 case "$command" in
@@ -172,14 +201,15 @@ case "$command" in
         fi
         ;;
     _exec)
-        if which realpath >/dev/null 2>&1; then
-          path="`realpath "$0"`"
-        else
-          path="`readlink -f "$0"`"
+        if [ "a${zero#/etc}" = "a$zero" ]; then
+          cd "`dirname "$zero"`"
         fi
-        cd "`dirname "$path"`"
+        exec 2>&1
+        exec $sysvservice_exec
+        ;;
+    _exec_log)
         mkdir -p /var/log/$sysvservice_name
-        exec $sysvservice_exec 2>&1 | multilog t /var/log/$sysvservice_name
+        exec multilog t /var/log/$sysvservice_name
         ;;
     install-deps)
         if which apt-get >/dev/null 2>&1; then
