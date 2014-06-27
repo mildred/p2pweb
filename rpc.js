@@ -13,6 +13,10 @@ function RPC(){
   this._utpConnections = {};
 }
 
+RPC._debug = function(msg){
+  console.log("RPC: " + msg);
+}
+
 util.inherits(RPC, events.EventEmitter);
 
 RPC.prototype._getObject = function(fid, cb) {
@@ -70,11 +74,16 @@ RPC.prototype.setUTP = function(utpServer) {
       }
       
       if(requestObj.request == 'kademlia') {
-        return reply({ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)});
+        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(requestObj.data));
+        var response = {ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)};
+        RPC._debug("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(response.ok));
+        return reply();
       }
         
       if(requestObj.request == 'object') {
+        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
         self._getObject(requestObj.fid, function(err, data){
+          RPC._debug("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + data.length);
           if(err) return reply({error: err.toString()});
           reply({ok: data});
         });
@@ -82,6 +91,7 @@ RPC.prototype.setUTP = function(utpServer) {
       }
 
       if(requestObj.request == 'publicURL') {
+        RPC._debug("Receive Request: " + endpoint + "/" + requestObj.request + ": respond " + endpoint);
         return reply({ok: endpoint});
       }
 
@@ -167,6 +177,14 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
   var timeoutId;
   if(timeout) timeoutId = setTimeout(onTimeOut, timeout * 1000);
   
+  var requestURL = endpoint + "/" + request.request;
+  requestURL +=
+    (request.request == "kademlia") ? ("/" + request.type) :
+    (request.request == "object")   ? ("/" + request.fid)  :
+    "";
+  
+  RPC._debug("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
+  
   this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
     if(timeoutId) clearTimeout(timeoutId);
     if(timedOut)  return;
@@ -197,9 +215,12 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
       }
 
       if(!response || !response.ok){
-        console.error("RPC: no response");
-        return callback(new Error("Remote error: no response"));
+        var e = "RPC: no response for " + requestURL + " in " + JSON.stringify(response);
+        console.error(e);
+        return callback(new Error(e));
       }
+      
+      RPC._debug("Receive Response: " + requestURL + ": " + JSON.stringify(response.ok));
       
       callback(null, response.ok);
     });

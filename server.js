@@ -95,15 +95,13 @@ utpServer.listen(port, function(){
         }
         findIPAddress(app.kadrpc, dht, function(myaddr){
           console.log("Found self addr: " + myaddr);
-          // FIXME: automatically publish keys to new contacts, and republish
-          // regularly
-          console.log("Kad: Publish filelist");
-          console.log(app.storage.filelist);
+          //console.log("Kad: Publish filelist");
+          //console.log(app.storage.filelist);
           for(fid in app.storage.filelist){
             var keys = app.storage.filelist[fid].ids;
             for(var i = 0; i < keys.length; i++) {
               console.log("Store " + keys[i] + " " + dht.id);
-              dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
+              dht.multiset(keys[i], dht.id.toString(), {file_at: myaddr}, function(err){
                 if(err) throw err;
               });
             }
@@ -120,58 +118,6 @@ app.websock.listen(server);
 server.listen(port, '0.0.0.0', function(){
   console.log('Server running at http://127.0.0.1:' + port + '/');
 });
-
-/*
-
-var seedc  = new seedclient.SeedClient(seedurl, {
-  //localAddress: '127.0.0.1', // FIXME
-  localPort: port
-});
-var seeds = [];
-var myaddr;
-
-seedc.on('seeds', function(s){
-  seeds = s;
-  console.log("Kad: starting with seeds");
-  console.log(seeds);
-  kad.Dht.spawn(app.kadrpc, seeds, function(err, dht){
-    if(err) {
-      console.log("Kad error: " + err);
-    } else {
-      app.initDHT(dht);
-      console.log("Kad: DHT started");
-      for(fid in app.storage.filelist){
-        var keys = app.storage.filelist[fid].ids;
-        for(var i = 0; i < keys.length; i++) {
-          dht.multiset(keys[i], dht.id, {file_at: myaddr}, function(err){
-            if(err) throw err;
-          });
-        }
-      }
-    }
-  });
-});
-
-seedc.on('address', function(addr){
-  console.log("Address found on seedserver:");
-  console.log(addr);
-  myaddr = addr;
-});
-
-seedc.on('localAddress', function(addr){
-  console.log("Local address to bind to:");
-  console.log(addr);
-  
-  app.kadrpc.setLocalEndpoint(addr.address, addr.port);
-
-  server.listen(addr.port, addr.address, function(){
-    console.log('Server running at http://' + addr.address + ':' + addr.port + '/');
-  });
-});
-
-seedc.start();
-
-*/
 
 console.log('Using data directory at ' + datadir);
 app.init(datadir);
