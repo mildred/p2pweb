@@ -73,7 +73,6 @@ var addfile = function(file) {
           if(isp2pws(metadata.headers)){
             var h = new SignedHeader(sha1sum, verifysign);
             h.parseText(data.toString());
-            h.checkHeaders();
             real_fid = h.getFirstId() || key;
             all_ids = h.getSectionsIds();
             all_ids.push(all_ids.last);
