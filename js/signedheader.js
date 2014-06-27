@@ -216,11 +216,8 @@ SignedHeader.prototype.getSectionsIds = function () {
 }
 
 SignedHeader.prototype.getFirstId = function (){
-  var text = "";
-  for(var i = 0; i < this.headers.length; i++) {
-    var h = this.headers[i];
-    text += h.text;
-    if(h.name == "Signature") return this._hashFunc(text);
+  if(this._firstSignature !== null && this._firstSignature < this.headers.length) {
+    return this.headers[this._firstSignature].hashId;
   }
   return undefined;
 };
