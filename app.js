@@ -322,7 +322,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
       return;
     }
     var h = new SignedHeader(sha1sum, verifysign);
-    h.parseText(data);
+    h.parseText(data, fid);
     ver = parseInt(ver);
     if(!unsigned) {
       h.checkHeaders();

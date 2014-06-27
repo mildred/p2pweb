@@ -443,7 +443,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         return callback();
       }
       var site = new SignedHeader(sha1hex, sign.checksign);
-      site.parseText(content);
+      site.parseText(content, siteKey);
       
       var siteList = getSiteList();
       siteList[siteKey] = siteList[siteKey] || {};
