@@ -32,6 +32,10 @@ init_rundir(){
     # Avoid noexec restriction in $dir
     ln -sf "/etc/init.d/$sysvservice_name" "$dir/log/run"
   fi
+  if ! [ -p "$dir/log.pipe" ]; then
+    rm -f "$dir/log.pipe"
+    mkfifo "$dir/log.pipe"
+  fi
 }
 
 status_q(){
@@ -48,17 +52,12 @@ status(){
 }
 
 start(){
-  if ! [ -p "$dir/log.pipe" ]; then
-    rm -f "$dir/log.pipe"
-    mkfifo "$dir/log.pipe"
-  fi
   if ! svok "$dir"; then
-    nohup supervise "$dir" </dev/null >"$dir/log.pipe" 2>&1 &
+    nohup supervise "$dir" >>"$dir/log.pipe" 2>&1 &
     sleep 0.1
   fi
   if [ -d "$dir/log" ] && ! svok "$dir/log"; then
-    nohup supervise "$dir/log" <"$dir/log.pipe" 2>&1 | logger -p daemon.crit -t "$sysvservice_name.log" &
-    : >>"$dir/log.pipe" # unblock the open() for the fifo
+    nohup supervise "$dir/log" 2>&1 | logger -p daemon.crit -t "$sysvservice_name.log" &
     sleep 0.1
   fi
   svc -u "$dir/log"
@@ -217,11 +216,11 @@ case "$command" in
         if [ "a${zero#/etc}" = "a$zero" ]; then
           cd "`dirname "$zero"`"
         fi
-        exec 2>&1
         exec $sysvservice_exec
         ;;
     _exec_log)
         mkdir -p /var/log/$sysvservice_name
+        exec <"$dir/log.pipe"
         exec multilog t /var/log/$sysvservice_name
         ;;
     install-deps)
