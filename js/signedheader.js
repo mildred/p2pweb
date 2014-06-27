@@ -247,12 +247,25 @@ SignedHeader.prototype.addHeader = function (name, value) {
   var text = name + ": " + this._escapeValue(value) + "\n";
   this.text += text;
   var lasthead = this.headers[this.headers.last - 1] || {section: 0};
-  this.headers.push({
-    name: name,
-    text: text,
-    value: value,
-    section: lasthead.section + ((lasthead.name == "Signature") ? 1 : 0)
-  });
+  var h = {
+    name:    name,
+    text:    text,
+    value:   value,
+    section: lasthead.section + ((lasthead.name == "Signature") ? 1 : 0),
+    valid:   true
+  };
+  if(name == "Signature") {
+    h.hashId = this._hashFunc(this.text);
+    var i = this.headers.length;
+    if(this._firstSignature === null)
+      this._firstSignature = i;
+    if(this._lastSignature !== null)
+      this.headers[this._lastSignature].nextSignature = i;
+    h.prevSignature = this._lastSignature;
+    h.nextSignature = null;
+    this._lastSignature = i;
+  }
+  this.headers.push(h);
   this.notifyChange();
 }
 
