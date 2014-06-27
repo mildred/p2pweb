@@ -71,11 +71,11 @@ var addfile = function(file) {
           var key = sha1sum(data);
           
           if(isp2pws(metadata.headers)){
-            var h = new SignedHeader(verifysign);
+            var h = new SignedHeader(sha1sum, verifysign);
             h.parseText(data.toString());
             h.checkHeaders();
-            real_fid = h.getFirstId(sha1sum) || key;
-            all_ids = h.getSectionsIds(sha1sum);
+            real_fid = h.getFirstId() || key;
+            all_ids = h.getSectionsIds();
             all_ids.push(all_ids.last);
             register_file(real_fid, file, all_ids, metadata);
           } else {
@@ -119,11 +119,11 @@ var create = function(fid, req, callback){
         var real_fid = digest;
         var all_ids = [real_fid];
         if(is_p2pws){
-          var h = new SignedHeader(verifysign);
+          var h = new SignedHeader(sha1sum, verifysign);
           h.parseText(Buffer.concat(data).toString());
           h.checkHeaders();
-          real_fid = h.getFirstId(sha1sum);
-          all_ids = h.getSectionsIds(sha1sum);
+          real_fid = h.getFirstId();
+          all_ids = h.getSectionsIds();
         }
 
         if(real_fid != fid) {

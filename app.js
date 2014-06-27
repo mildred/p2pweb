@@ -321,7 +321,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
       res.end("File Not Found");
       return;
     }
-    var h = new SignedHeader(verifysign);
+    var h = new SignedHeader(sha1sum, verifysign);
     h.parseText(data);
     ver = parseInt(ver);
     if(!unsigned) {
@@ -335,7 +335,7 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
     }
     var f = h.getFile(path, isFinite(ver) ? ver : undefined);
     if(!f) {
-      var ids = h.getSectionsIds(sha1sum);
+      var ids = h.getSectionsIds();
       res.setHeader("Content-Type", "text/plain");
       res.writeHead(404, "Not Found");
       var displayVer   = isFinite(ver) ? ver

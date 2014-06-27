@@ -180,7 +180,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function updateSite(sitenum, site, privateKey){
     var pages = site.getFileList();
-    var siteKey = site.getFirstId(sha1hex);
+    var siteKey = site.getFirstId();
     var siteTitle = site.getLastHeader("Title");
     var pageArray = [];
     if(!privateKey) privateKey = privateKeyStore[siteKey];
@@ -256,7 +256,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
   }
 
   function updateSitePageEditor(sitenum, site, existingContent){
-    var siteKey = site.getFirstId(sha1hex);
+    var siteKey = site.getFirstId();
     existingContent = existingContent || {};
     parseMetaData(existingContent);
     var newpage = !existingContent.url;
@@ -426,7 +426,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function saveSite(site){
     //console.log(site);
-    sendBlob(site.text, site.getFirstId(sha1hex), "application/vnd.p2pws", function(r, id){
+    sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
       if(r) {
         console.error(r.status + ' ' + r.statusText);
         alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText);
@@ -442,7 +442,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
         alert("Could not load site " + siteKey + ":\n" + err.status + " " + err.statusText);
         return callback();
       }
-      var site = new SignedHeader();
+      var site = new SignedHeader(sha1hex, sign.checksign);
       site.parseText(content);
       
       var siteList = getSiteList();
@@ -509,12 +509,12 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
     function KeyAvailable(crypt_, generated){
       crypt = crypt_;
-      site = new SignedHeader();
+      site = new SignedHeader(sha1hex, sign.checksign);
       site.addHeader("Format", "P2P Website");
       site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       site.addSignature(sign.sign(crypt));
       saveSite(site);
-      id = site.getFirstId(sha1hex);
+      id = site.getFirstId();
       span_wid.textContent = id;
       
       btn_save.disabled = false;
