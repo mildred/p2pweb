@@ -79,8 +79,8 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     r.open("PUT", "/obj/" + blobid);
     r.setRequestHeader("Content-Type", content_type);
     r.onreadystatechange = function(){
-      if(!r.status) return;
-      if(r.status >= 400) cb(r);
+      if(!r.status || !r.responseText) return;
+      if(r.status >= 400) cb(r, r.responseText);
       else cb(null, blobid);
       r.onreadystatechange = undefined;
     };
@@ -399,7 +399,7 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
       sendBlob(doc, docid, "text/html; charset=utf-8", function(r, id){
         if(r) {
           console.error(r.status + ' ' + r.statusText);
-          alert("Error: could not save to the server.\n" + r.status + " " + r.statusText);
+          alert("Error: could not save to the server.\n" + r.status + " " + r.statusText + "\n" + id);
         } else {
           //console.log("PUT /obj/" + id + " ok");
           window.router.go("#!/site/" + (sitenum || siteKey) + "/page" + path);
@@ -447,7 +447,8 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
       if(r) {
         console.error(r.status + ' ' + r.statusText);
-        alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText);
+        alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText + "\n" + id);
+        // FIXME: we shouldn't reload because we are loosing changes here
       } else {
         //console.log("PUT /obj/" + id + " ok");
       }

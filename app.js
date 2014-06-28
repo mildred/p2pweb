@@ -155,8 +155,11 @@ app.get("/rpc/storage/object/:fid", function(req, res){
   var f = storage.filelist[req.params.fid];
   if(!f) return failNotFound(res);
   
-  for(var i = 0; i < f.ids.length; ++i){
-    res.write(f.ids[i] + "\n");
+  for(var i = 0; i < f.signed_ids.length; ++i){
+    res.write(f.signed_ids[i] + "\n");
+  }
+  for(var i = 0; i < f.extra_ids.length; ++i){
+    res.write(f.extra_ids[i] + " ?\n");
   }
   res.write("\n");
   for(var h in f.metadata.headers){

@@ -119,7 +119,7 @@ utpServer.listen(port, function(){
           //console.log("Kad: Publish filelist");
           //console.log(app.storage.filelist);
           for(fid in app.storage.filelist){
-            var keys = app.storage.filelist[fid].ids;
+            var keys = app.storage.filelist[fid].all_ids;
             for(var i = 0; i < keys.length; i++) {
               console.log("Store " + keys[i] + " " + dht.id);
               dht.multiset(kad.Id.fromHex(keys[i]), dht.id.toString(), {file_at: myaddr}, function(err){

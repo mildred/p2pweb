@@ -163,12 +163,13 @@ SignedHeader.prototype.getLastUnsignedSection = function () {
   return h.section;
 }
 
-SignedHeader.prototype.getSectionsIds = function () {
+SignedHeader.prototype.getSectionsIds = function (select_valid) {
   var i = this._firstSignature;
   var ids = [];
   while(i !== null && i < this.headers.length) {
     var h = this.headers[i];
-    ids.push(h.hashId);
+    if(select_valid === undefined || select_valid === h.valid)
+      ids.push(h.hashId);
     i = h.nextSignature;
   }
   ids.last = this._hashFunc(this.text);

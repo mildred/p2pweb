@@ -11,21 +11,31 @@ var datadir = __dirname + '/data';
 var filelist = {};
 var sitelist = {};
 
-var register_file = function(fid, path, ids, metadata){
+var register_file = function(fid, path, signed_ids, extra_ids, metadata){
   //console.log("Register " + fid + " " + path);
-  if(ids[ids.length-1] === ids[ids.length-2]) ids.pop();
+  if(extra_ids[extra_ids.length-1] === extra_ids[extra_ids.length-2]) extra_ids.pop();
   filelist[fid] = {
     metadata: metadata,
     path: path,
-    ids: ids
+    signed_ids: signed_ids,
+    extra_ids: extra_ids,
+    all_ids: signed_ids.concat(extra_ids)
   };
-  for(var i = 0; i < ids.length; i++) {
-    console.log("Register " + ids[i] + " #" + i + " " + path);
-    if(ids[i] == fid) continue;
-    filelist[ids[i]] = {
+  for(var i = 0; i < signed_ids.length; i++) {
+    registerSubId(signed_ids[i], i, true);
+  }
+  for(var i = 0; i < extra_ids.length; i++) {
+    registerSubId(extra_ids[i], signed_ids.length + i, false);
+  }
+  function registerSubId(id, i, signed){
+    console.log("Register " + id + " #" + i + (signed ? "" : "?") + " " + path);
+    if(id == fid) return;
+    filelist[id] = {
       metadata: metadata,
       path: path,
-      ids: [],
+      signed_ids: [],
+      extra_ids: [],
+      all_ids: [],
       source_id: fid
     };
   }
@@ -75,11 +85,12 @@ var addfile = function(file) {
             var h = new SignedHeader(sha1sum, verifysign);
             h.parseText(data.toString());
             real_fid = h.getFirstId() || key;
-            all_ids = h.getSectionsIds();
-            all_ids.push(all_ids.last);
-            register_file(real_fid, file, all_ids, metadata);
+            all_signed_ids = h.getSectionsIds(true);
+            all_extra_ids = h.getSectionsIds(false);
+            all_extra_ids.push(all_extra_ids.last);
+            register_file(real_fid, file, all_signed_ids, all_extra_ids, metadata);
           } else {
-            register_file(key, file, [key], metadata);
+            register_file(key, file, [key], [], metadata);
           }
         });
       });
@@ -117,12 +128,14 @@ var create = function(fid, req, callback){
 
         var digest = sum.digest('hex');
         var real_fid = digest;
-        var all_ids = [real_fid];
+        var all_signed_ids = [real_fid];
+        var all_extra_ids = [];
         if(is_p2pws){
           var h = new SignedHeader(sha1sum, verifysign);
           h.parseText(Buffer.concat(data).toString());
           real_fid = h.getFirstId();
-          all_ids = h.getSectionsIds();
+          all_signed_ids = h.getSectionsIds(true);
+          all_extra_ids = h.getSectionsIds(false);
         }
 
         if(real_fid != fid) {
@@ -134,11 +147,11 @@ var create = function(fid, req, callback){
         
         if(is_p2pws){
           var would_loose = [];
-          var actual_ids = (filelist[real_fid] || {}).ids || [];
+          var actual_ids = (filelist[real_fid] || {}).signed_ids || [];
           for(var i = 0; i < actual_ids.length; i++) {
             var loose = true;
-            for(var j = 0; j < all_ids.length && loose; j++) {
-              if(actual_ids[i] == all_ids[j]) loose = false;
+            for(var j = 0; j < all_signed_ids.length && loose; j++) {
+              if(actual_ids[i] == all_signed_ids[j]) loose = false;
             }
             if(loose) would_loose.push("#" + i + ": " + actual_ids[i]);
           }
@@ -158,8 +171,8 @@ var create = function(fid, req, callback){
           var metadata = {
             headers: { "content-type": headers["content-type"] }
           };
-          if(all_ids.last) all_ids.push(all_ids.last);
-          register_file(fid, filename, all_ids, metadata);
+          if(all_extra_ids.last) all_extra_ids.push(all_extra_ids.last);
+          register_file(fid, filename, all_signed_ids, all_extra_ids, metadata);
           callback(201, "Created", fid);
           fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
         });
