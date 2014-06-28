@@ -8,7 +8,8 @@ var SignedHeader = require('./js/signedheader');
   
 var datadir = __dirname + '/data';
 
-var filelist = {}
+var filelist = {};
+var sitelist = {};
 
 var register_file = function(fid, path, ids, metadata){
   //console.log("Register " + fid + " " + path);
@@ -120,7 +121,6 @@ var create = function(fid, req, callback){
         if(is_p2pws){
           var h = new SignedHeader(sha1sum, verifysign);
           h.parseText(Buffer.concat(data).toString());
-          h.truncate();
           real_fid = h.getFirstId();
           all_ids = h.getSectionsIds();
         }
@@ -172,6 +172,7 @@ module.exports = {
   addfile: addfile,
   create: create,
   filelist: filelist,
+  sitelist: sitelist,
   setDataDir: function(dir){
     datadir = dir;
   }
