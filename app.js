@@ -66,6 +66,13 @@ var failDHTNotInitilized = function(res){
   res.end("kadmelia not initialized, try again later.");
 };
 
+
+var failNotFound = function(res){
+  res.setHeader("Content-Type", "text/plain");
+  res.writeHead(404, "Not Found");
+  res.end("Resource not found.");
+};
+
 app.get("/rpc/seeds", function(req, res){
   if(!dht) return failDHTNotInitilized(res);
 
@@ -113,6 +120,49 @@ app.get("/rpc/cache/:k1/:k2.json", function(req, res){
   res.setHeader("Content-Type", "application/json");
   var cache = dht.getCache()[req.params.k1] || {};
   res.end(JSON.stringify(cache[req.params.k2] || null));
+});
+
+app.get("/rpc/storage/objects", function(req, res){
+  res.setHeader("Content-Type", "text/plain");
+  for(var k in storage.filelist) {
+    var f = storage.filelist[k];
+    var meta = (f.source_id) ? {source_id: f.source_id} : f.metadata;
+    res.write(k + "\t" + JSON.stringify(meta) + "\n");
+  }
+  res.end();
+});
+
+app.get("/rpc/storage/objects.html", function(req, res){
+  res.setHeader("Content-Type", "text/html");
+  res.write("<!DOCTYPE html5>\n<pre>");
+  for(var k in storage.filelist) {
+    var f = storage.filelist[k];
+    var meta = (f.source_id) ? {source_id: f.source_id} : f.metadata;
+    res.write("<a href=\"object/" + k + "\">" + k + "</a>" + "\t" + "<a href=\"object/" + k + ".json\">" + JSON.stringify(meta) + "</a>\n");
+  }
+  res.end("</pre>");
+});
+
+app.get("/rpc/storage/object/:fid.json", function(req, res){
+  res.setHeader("Content-Type", "application/json");
+  var f = storage.filelist[req.params.fid];
+  if(!f) return failNotFound(res);
+  res.end(JSON.stringify(f));
+});
+
+app.get("/rpc/storage/object/:fid", function(req, res){
+  res.setHeader("Content-Type", "text/plain");
+  var f = storage.filelist[req.params.fid];
+  if(!f) return failNotFound(res);
+  
+  for(var i = 0; i < f.ids.length; ++i){
+    res.write(f.ids[i] + "\n");
+  }
+  res.write("\n");
+  for(var h in f.metadata.headers){
+    res.write(h + ":\t" + f.metadata.headers[h] + "\n");
+  }
+  res.end();
 });
 
 var proxyFile = function(res2, options){
