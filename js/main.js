@@ -24,6 +24,15 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     }
   });
 
+  var section_open_website_ul_template = pure('#section-open-website ul').compile({
+    'li': {
+      'site<-sites': {
+        'a':      "site.id",
+        'a@href': '#!/site/#{site.id}'
+      }
+    }
+  });
+
   var section_website_template = pure('#section-website').compile({
     '.meta .revision':         "lastSignedSection",
     '.meta .key':              "siteKey",
@@ -175,6 +184,33 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
 
   function saveSiteList(siteList){
     localStorage.setItem("P2PWS.siteList", JSON.stringify(siteList))
+  }
+  
+  function getServerSiteList(cb){
+    var r = new XMLHttpRequest();
+    r.open("GET", "/rpc/storage/sites");
+    r.onreadystatechange = function(){
+      if(r.readyState < 4) return;
+      if(r.status >= 400) {
+        cb(r);
+      } else {
+        var res = {};
+        r.responseText.split('\n').forEach(function(s){
+          s = s.split('\t');
+          var id = s[0] || "";
+          if(id.length == 0) return;
+          res[id] = {
+            id: id,
+            signed_ids: (s[1] || "").split(' '),
+            extra_ids:  (s[2] || "").split(' ')
+          };
+        });
+        cb(null, res);
+      }
+      r.onreadystatechange = undefined;
+    };
+    r.send();
+
   }
 
   //
@@ -489,8 +525,17 @@ require(['/js/keygen', '/js/keytools', '/js/sign', '/js/router', '/js/sha1hex', 
     section.show();
     var website_id = section.querySelector(".website input");
     var btn_ok     = section.querySelector(".btn-ok");
-
+    
     btn_ok.addEventListener('click', Finish);
+
+    getServerSiteList(function(err, list){
+      if(err) {
+        return alert("Error getting site list from server:\n" + err.status + " " + err.statusText + "\n" + err.responseText);
+      }
+      document.querySelector('#section-open-website ul').outerHTML = section_open_website_ul_template({
+        sites: list
+      });
+    });
 
     function Finish(){
       window.router.go("#!/site/" + website_id.value);
