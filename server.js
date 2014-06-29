@@ -115,23 +115,68 @@ utpServer.listen(port, function(){
           console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
         }
         findIPAddress(app.kadrpc, dht, function(myaddr){
-          console.log("Found self addr: " + myaddr);
-          //console.log("Kad: Publish filelist");
-          //console.log(app.storage.filelist);
-          for(fid in app.storage.filelist){
-            var keys = app.storage.filelist[fid].all_ids;
-            for(var i = 0; i < keys.length; i++) {
-              console.log("Store " + keys[i] + " " + dht.id);
-              dht.multiset(kad.Id.fromHex(keys[i]), dht.id.toString(), {file_at: myaddr}, function(err){
-                if(err) throw err;
-              });
-            }
-          }
+          start(dht, myaddr);
         });
       });
     });
   });
 });
+
+function start(dht, myaddr){
+  console.log("Found self addr: " + myaddr);
+  //console.log("Kad: Publish filelist");
+  //console.log(app.storage.filelist);
+  for(var fid in app.storage.filelist){
+    publishItem(myaddr, dht, app.storage.filelist[fid], function(err) {
+      if(err) throw err;
+    });
+  }
+}
+
+function publishItem(myaddr, dht, f, cb){
+  var data = {
+    file_at: myaddr,
+    node_id: dht.id.toString(),
+  };
+  if(f.site) {
+    data.revision = f.site.revision;
+    var subdata = {
+      file_at:  myaddr,
+      node_id:  dht.id.toString(),
+      site_id:  f.id,
+      revision: f.site.revision
+    };
+    for(var i = 0; i < f.site.all_ids.length; i++) {
+      var subid = f.site.all_ids[i];
+      dht.multiset(kad.Id.fromHex(subid), dht.id.toString(), subdata, cb);
+    }
+  }
+  dht.multiset(kad.Id.fromHex(f.id), dht.id.toString(), data, cb);
+}
+
+function refreshSites(sitelist, defaultRefresh){
+  defaultRefresh = defaultRefresh || 1000 * 60 * 60; // 1 hour
+  var now = new Date();
+  var minNextRefresh = now + defaultRefresh;
+  for(var fid in sitelist) {
+    var site = sitelist[fid];
+    var refresh = site.metadata.refreshInterval || defaultRefresh;
+    var lastRefresh = site.lastRefresh;
+    var nextRefresh;
+    if(!lastRefresh || lastRefresh + refresh < now) {
+      nextRefresh = now + refresh;
+      refreshSite(site);
+    } else {
+      nextRefresh = lastRefresh + refresh;
+    }
+    if(nextRefresh < minNextRefresh) minNextRefresh = nextRefresh;
+  }
+  return minNextRefresh - new Date();
+}
+
+function refreshSite(site) {
+  //rpc.
+}
 
 var server = http.Server(app.app);
 app.websock.listen(server);

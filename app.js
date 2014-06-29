@@ -38,7 +38,7 @@ app.get('/tools-ws.html', function(req, res){
 
 app.put('/obj/:fid', function(req, res){
   var fid = req.params.fid.toLowerCase();
-  storage.create(fid, req, function(code, title, message){
+  storage.putObject(fid, req, function(code, title, message){
     res.setHeader("Content-Type", "text/plain");
     res.writeHead(code, title);
     res.end(message);
@@ -122,6 +122,24 @@ app.get("/rpc/cache/:k1/:k2.json", function(req, res){
   res.end(JSON.stringify(cache[req.params.k2] || null));
 });
 
+app.get("/rpc/storage/sites", function(req, res){
+  res.setHeader("Content-Type", "text/plain");
+  for(var k in storage.sitelist) {
+    var f = storage.filelist[k];
+    res.write(k);
+    for(var i = 0; i < f.signed_ids.length; ++i) {
+      res.write(i == 0 ? '\t' : ' ');
+      res.write(f.signed_ids[i]);
+    }
+    for(var i = 0; i < f.extra_ids.length; ++i) {
+      res.write(i == 0 ? '\t' : ' ');
+      res.write(f.extra_ids[i]);
+    }
+    res.write('\n');
+  }
+  res.end();
+});
+
 app.get("/rpc/storage/objects", function(req, res){
   res.setHeader("Content-Type", "text/plain");
   for(var k in storage.filelist) {
@@ -186,58 +204,10 @@ var proxyFile = function(res2, options){
   req.end();
 }
 
+// getFile: Get file from DHT
+//
 var getFile = function(fid, cb){
-  console.log("getFile(" + fid + ")");
-  var file = storage.filelist[fid];
-  if(file) {
-    console.log("getFile(" + fid + "): file available locally");
-    fs.readFile(file.path, function (err, data) {
-      if(err) {
-        err.httpStatus = 500;
-        return cb(err);
-      }
-      cb(null, data.toString(), file.metadata);
-    });
-    return;
-  }
-  
-  if(!dht) {
-    console.log("getFile(" + fid + "): DHT not initialized");
-    return cb(new Error("DHT not initialized"));
-  }
-  
-  console.log("getFile(" + fid + "): ask the network");
-  dht.getall(kad.Id.fromHex(fid), function(err, data){
-    if(err) {
-      console.log("getFile(" + fid + "): " + err.toString());
-      err.httpStatus = 500;
-      return cb(err);
-    }
-    if(!data) {
-      console.log("getFile(" + fid + "): no data");
-      return cb();
-    }
-    console.log("getFile(" + fid + "): network answered " + JSON.stringify(data));
-    
-    var availableDestinations = {};
-    for(var k in data) {
-      if(!data[k].file_at) continue;
-      availableDestinations[k] = data[k].file_at;
-    }
-    var destination = random.value(availableDestinations);
-    console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
-
-    kadutprpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
-      if(err) {
-        console.log("getFile(" + fid + "): " + err.toString());
-        err.httpStatus = 502;
-        return cb(err);
-      }
-      
-      console.log("getFile(" + fid + "): got data");
-      cb(null, reply.data, reply.metadata);
-    });
-  });
+  return storage.getObject(dht, kadutprpc, fid, cb);
 };
 
 var redirectObjectNotFound = function(fid, path, res, opts) {
@@ -432,7 +402,6 @@ module.exports = {
   init: function(datadir) {
     datadir = datadir || (__dirname + '/data');
     storage.setDataDir(datadir);
-    storage.addfile(datadir);
   },
   initDHT: function(dht_){
     console.log("Kad: Initialize DHT");

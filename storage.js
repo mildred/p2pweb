@@ -1,36 +1,68 @@
 var fs      = require('fs');
 var tmp     = require('tmp');
+var kad     = require('kademlia-dht');
 var path    = require('path');
 var crypto  = require('crypto');
+var random  = require('./random');
 var sha1sum = require('./sha1sum');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
-  
+
 var datadir = __dirname + '/data';
 
 var filelist = {};
 var sitelist = {};
 
-var register_file = function(fid, path, signed_ids, extra_ids, metadata){
+var isp2pws = function(headers){
+  return /^application\/vnd.p2pws(;.*)$/.test(headers["content-type"]);
+};
+
+var register_file = function(fid, path, metadata, h){
+  // FIXME: refactoring parameters
   //console.log("Register " + fid + " " + path);
-  if(extra_ids[extra_ids.length-1] === extra_ids[extra_ids.length-2]) extra_ids.pop();
+
+  var all_signed_ids, all_extra_ids, all_ids;
+  if(h) {
+    all_signed_ids = h.getSectionsIds(true);
+    all_extra_ids  = h.getSectionsIds(false);
+    if(all_extra_ids.last != all_extra_ids[all_extra_ids.length-1]) all_extra_ids.push(all_extra_ids.last);
+    all_ids        = all_signed_ids.concat(all_extra_ids)
+
+    sitelist[fid] = {
+      metadata: metadata,
+      signed_ids: all_signed_ids,
+      extra_ids:  all_extra_ids,
+      all_ids:    all_ids,
+      revision:   h.getLastSignedSection()
+    };
+  } else {
+    all_signed_ids = [fid];
+    all_extra_ids  = [];
+    all_ids        = [];
+  }
+
   filelist[fid] = {
+    id: fid,
     metadata: metadata,
     path: path,
-    signed_ids: signed_ids,
-    extra_ids: extra_ids,
-    all_ids: signed_ids.concat(extra_ids)
+    signed_ids: all_signed_ids,
+    extra_ids: all_extra_ids,
+    all_ids: all_ids,
+    site: sitelist[fid]
   };
-  for(var i = 0; i < signed_ids.length; i++) {
-    registerSubId(signed_ids[i], i, true);
+
+  for(var i = 0; i < all_signed_ids.length; i++) {
+    registerSubId(all_signed_ids[i], i, true);
   }
-  for(var i = 0; i < extra_ids.length; i++) {
-    registerSubId(extra_ids[i], signed_ids.length + i, false);
+  for(var i = 0; i < all_extra_ids.length; i++) {
+    registerSubId(all_extra_ids[i], all_signed_ids.length + i, false);
   }
+
   function registerSubId(id, i, signed){
     console.log("Register " + id + " #" + i + (signed ? "" : "?") + " " + path);
     if(id == fid) return;
     filelist[id] = {
+      id: fid,
       metadata: metadata,
       path: path,
       signed_ids: [],
@@ -40,10 +72,6 @@ var register_file = function(fid, path, signed_ids, extra_ids, metadata){
     };
   }
 }
-
-var isp2pws = function(headers){
-  return /^application\/vnd.p2pws(;.*)$/.test(headers["content-type"]);
-};
 
 var logerror = function(e) {
   if(e) console.log(e);
@@ -88,9 +116,9 @@ var addfile = function(file) {
             all_signed_ids = h.getSectionsIds(true);
             all_extra_ids = h.getSectionsIds(false);
             all_extra_ids.push(all_extra_ids.last);
-            register_file(real_fid, file, all_signed_ids, all_extra_ids, metadata);
+            register_file(real_fid, file, metadata, h);
           } else {
-            register_file(key, file, [key], [], metadata);
+            register_file(key, file, metadata, null);
           }
         });
       });
@@ -98,7 +126,7 @@ var addfile = function(file) {
   });
 };
 
-var create = function(fid, req, callback){
+var putObject = function(fid, req, callback){
   var headers = req.headers;
   var filename = path.join(datadir, fid);
   var filename_meta = filename + ".meta";
@@ -129,13 +157,12 @@ var create = function(fid, req, callback){
         var digest = sum.digest('hex');
         var real_fid = digest;
         var all_signed_ids = [real_fid];
-        var all_extra_ids = [];
+        var h;
         if(is_p2pws){
-          var h = new SignedHeader(sha1sum, verifysign);
+          h = new SignedHeader(sha1sum, verifysign);
           h.parseText(Buffer.concat(data).toString());
           real_fid = h.getFirstId();
           all_signed_ids = h.getSectionsIds(true);
-          all_extra_ids = h.getSectionsIds(false);
         }
 
         if(real_fid != fid) {
@@ -171,22 +198,81 @@ var create = function(fid, req, callback){
           var metadata = {
             headers: { "content-type": headers["content-type"] }
           };
-          if(all_extra_ids.last) all_extra_ids.push(all_extra_ids.last);
-          register_file(fid, filename, all_signed_ids, all_extra_ids, metadata);
+          register_file(fid, filename, metadata, h);
           callback(201, "Created", fid);
           fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
         });
       });
     }
   });
-}
+};
+
+// getObject: fetch an object, either from the cache or from the DHT.
+// FIXME: don't transmit full data but transmit in chunks
+// cb(err, data, metadata)
+//
+var getObject = function(dht, rpc, fid, cb) {
+  var f = filelist[fid];
+  if(f) {
+    console.log("getObject(" + fid + "): file available locally");
+    fs.readFile(f.path, function (err, data) {
+      if(err) {
+        err.httpStatus = 500;
+        return cb(err);
+      }
+      cb(null, data.toString(), f.metadata);
+    });
+    return;
+  }
+  
+  if(!dht) {
+    console.log("getObject(" + fid + "): DHT not initialized");
+    var err = new Error("DHT not initialized");
+    err.httpStatus = 503
+    return cb(err);
+  }
+  
+  console.log("getObject(" + fid + "): ask the network");
+  dht.getall(kad.Id.fromHex(fid), function(err, data){
+    if(err) {
+      console.log("getObject(" + fid + "): " + err.toString());
+      err.httpStatus = 500;
+      return cb(err);
+    }
+    if(!data) {
+      console.log("getObject(" + fid + "): no data");
+      return cb();
+    }
+    console.log("getObject(" + fid + "): network answered " + JSON.stringify(data));
+    
+    var availableDestinations = {};
+    for(var k in data) {
+      if(!data[k].file_at) continue;
+      availableDestinations[k] = data[k].file_at;
+    }
+    var destination = random.value(availableDestinations);
+    console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
+
+    rpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
+      if(err) {
+        console.log("getObject(" + fid + "): " + err.toString());
+        err.httpStatus = 502;
+        return cb(err);
+      }
+      
+      console.log("getObject(" + fid + "): got data (" + reply.data.length + " bytes)");
+      cb(null, reply.data, reply.metadata);
+    });
+  });
+};
 
 module.exports = {
-  addfile: addfile,
-  create: create,
-  filelist: filelist,
-  sitelist: sitelist,
+  getObject: getObject,
+  putObject: putObject,
+  filelist:  filelist,
+  sitelist:  sitelist,
   setDataDir: function(dir){
     datadir = dir;
+    addfile(datadir);
   }
 }
