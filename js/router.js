@@ -46,6 +46,7 @@ Router.prototype.fallback = function(callback){
 }
 
 Router.prototype.run = function(){
+  console.log("router.js: run");
   this._window.addEventListener('load',       this._router);
   this._window.addEventListener('hashchange', this._router);
   if(this._window.loaded) this._router();

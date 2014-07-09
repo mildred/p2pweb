@@ -134,11 +134,6 @@ function require_sync(context, mod) {
   }
   var mod = resolve(context, mod);
   var cacheid = to_cacheid(mod);
-  if(typeof process == "object" && process.versions.node) {
-    // NodeJS or NodeWebKit: use the synchronious require anyway
-    console.log("r.js: late node require " + mod);
-    require_node(cacheid, mod);
-  }
   if(cache[cacheid] !== undefined && cache[cacheid].exports !== undefined) {
     return cache[cacheid].exports;
   } else {
@@ -160,10 +155,10 @@ function require_async(context) {
       });
     }
   }
+  execute_callbacks();
 }
 
 function resolve(context, mod) {
-  if(typeof process == "object" && process.versions.node) return mod;
   if(!/^\.\//.test(mod)) return mod;
   var c = "/" + context;
   var c = c.replace(/\/[^\/]+$/g, "");
@@ -179,8 +174,6 @@ function resolve(context, mod) {
 }
 
 function to_cacheid(mod) {
-  if(typeof process == "object" && process.versions.node)
-    return "$" + (require.resolve || global.require.resolve)(mod);
   return "$" + to_url(mod);
 }
 
@@ -193,15 +186,9 @@ function require_async_single(mod) {
   if(cache[cacheid] !== undefined) return;
   cache[cacheid] = {}
   
-  if(typeof process == "object" && process.versions.node) {
-    // NodeJS or NodeWebKit: use the synchronious require instead. Do nothing.
-    console.log("r.js: node require " + mod);
-    require_node(cacheid, mod);
-  } else {
-    var url = to_url(mod);
-    //console.log("Loading module " + mod + " from: " + url);
-    get_script(mod, url, cacheid, load_script.bind(this, mod, url, cacheid));
-  }
+  var url = to_url(mod);
+  //console.log("Loading module " + mod + " from: " + url);
+  get_script(mod, url, cacheid, load_script.bind(this, mod, url, cacheid));
 }
 
 function require_node(cacheid, mod) {
@@ -237,8 +224,8 @@ function get_script(mod, url, cacheid, callback){
   function onLoad() {
     if (request.readyState != 4) {
       return;
-    } else if (request.status != 200) {
-      throw new RequireError('unable to load '+mod+" ("+request.status+" "+request.statusText+")");
+    } else if (request.status != 200 && request.status != 0 && !request.responseText) {
+      throw new RequireError('unable to load '+url+" ("+request.status+" "+request.statusText+"): " + request.responseText);
     } else if (locks[cacheid]) {
       console.warn("require.js: module locked: "+mod);
       callback && setTimeout(onLoad, 0);
@@ -265,32 +252,17 @@ function load_script(mod, url, cacheid, script) {
     throw e;
   }
   var dependentMods = [];
-  //console.log("Extracting dependencies for module " + mod + ": " + header);
-  //try {
-    headerFunc(function(m){
-      var m2 = resolve(mod, m);
-      require_async_single(m2);
-      dependentMods.push(m2);
-      //console.log("require: " + mod + " depends on " + m);
-      return {};
-    });
-  //} catch(e) {
-  //  console.error("Error executing header code");
-  //  console.error(e.toString());
-  //  console.error(e.stack);
-  //  console.error(header);
-  //  throw e;
-  //}
+  headerFunc(function(m){
+    var m2 = resolve(mod, m);
+    require_async_single(m2);
+    dependentMods.push(m2);
+    //console.log("require: " + mod + " depends on " + m);
+    return {};
+  });
   cache[cacheid].depends = dependentMods;
   
   var module = make_module_object(cacheid, mod);
   module.exports = {};
-
-  var id;
-  while(id === undefined || window[id] !== undefined) {
-    id = "require_" + mod + "_" + uid();
-  }
-  window[id] = code_ready;
 
   if(dependentMods.length > 0) {
     console.log("r.js: Module " + url + " depends on: " + dependentMods.join(", "));
@@ -302,15 +274,42 @@ function load_script(mod, url, cacheid, script) {
     //console.log("r.js: Module " + mod + " depends on: " + dependentMods.join(", "));
     deps_ready();
   }
+
+  var id;
   
   function deps_ready(){
-    add_code('window[' + JSON.stringify(id) + '](function(global, module, exports, require, $r){if(true){' + script + '\n} return {m:module, e:exports}; });\n//# sourceURL='+url);
+    if(false && typeof process == "object" && process.versions.node) {
+      console.log("r.js: Execute module " + url + " (use vm.createScript)");
+      var vm = require('vm');
+      var f = vm.createScript(script, url);
+      var Global = function(){
+        this.module = module;
+        this.exports = module.exports;
+        this.require = module.require;
+        this.$r      = module.require;
+      };
+      Global.prototype = global;
+      var context = new Global();
+      f.runInNewContext(context);
+      end_of_execution();
+    } else {
+      while(id === undefined || window[id] !== undefined) {
+        id = "require_" + mod + "_" + uid();
+      }
+      window[id] = code_ready;
+
+      add_code('window[' + JSON.stringify(id) + '](function(global, module, exports, require, $r){if(true){' + script + '\n} return {m:module, e:exports}; });\n//# sourceURL='+url);
+    }
   }
   
   function code_ready(f){
-    console.log("r.js: Execute module " + url);
-    delete window[id];
-    f.apply(module.exports, [window, module, module.exports, module.require, module.require]);
+    console.log("r.js: Execute module " + url + " (add <script> tag)");
+    if(id) delete window[id];
+    f.apply(module.exports, [global, module, module.exports, module.require, module.require]);
+    end_of_execution();
+  }
+  
+  function end_of_execution(){
     cache[cacheid].exports = module.exports
     if(cache[cacheid].loaded === undefined) {
       cache[cacheid].loaded = true
@@ -361,12 +360,15 @@ function execute_callbacks(){
 }
 
 function extract_header(s) {
-  var ws = /([\s\n]+|\/\/[^\n]*|\/\*.*?\*\/)+/.source;
-  var req = /(\$r|require)\([^\(\)]+\)(\s?\.\s?\S*|\s?\[[^\[\]]*\])?/.source;
-  var header = /^(\s?((var\s)?\S+\s?=\s?)?require(\s?,\s?\S+\s?=\s?require)*\s?;)+/.source;
-  header = new RegExp(header.replace(/require/g, "(" + req + ")").replace(/\\s/g, "(" + ws + ")"));
+  var ws = /([\s\n]+|\/\/[^\n]*|\/\*.*?\*\/)+/;
+  s = s.replace(/([\s\n]+|\/\/[^\n]*|\/\*.*?\*\/)+/g, function(x){
+    return new Array(x.length+1).join(" ");
+  });
+  var req = /(\$r|require)\([^\(\)]+\)(\s*\.\s*\S*|\s*\[[^\[\]]*\])?/.source;
+  var header = /^(\s*((var\s+)?\S+\s*=\s*)?require(\s*,\s*\S+\s*=\s*require)*\s*;)+/.source;
+  header = new RegExp(header.replace(/require/g, "(" + req + ")"));
   var cap = header.exec(s);
-  if(cap) return cap[0];
+  if(cap) return s.substr(0, cap[0].length);
 }
 
 function add_code(js, content_type){

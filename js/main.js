@@ -1,18 +1,16 @@
 
 require('./blob/Blob');
-require('./localStorage')
+require('./localStorage');
+require('./loaded');
 
-var $r       = require('./r'),
-    keytools = require('./keytools'),
+var keytools = require('./keytools'),
     sign     = require('./sign'),
     Router   = require('./router'),
     sha1hex  = require('./sha1hex'),
     pure     = require('./pure/pure').$p,
     saveAs   = require('./filesaver/FileSaver');
 
-$r.async('./loaded', function(){
-
-  console.log("main.js: running");
+(function(){
 
   //
   // Local storage
@@ -652,5 +650,5 @@ $r.async('./loaded', function(){
 
   r.run();
 
-}.bind(window));
+})();
 
