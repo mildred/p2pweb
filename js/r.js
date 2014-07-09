@@ -20,7 +20,7 @@
 
 'use strict';
 
-(function(loader){
+(function(loader, loaderContext){
 
   var loaded = false;
   var $r;
@@ -29,7 +29,7 @@
     if(window['tag:mildred.fr,2014:r.js'] !== undefined) {
       $r = window['tag:mildred.fr,2014:r.js'];
     } else {
-      $r = loader();
+      $r = loader(loaderContext);
       window['tag:mildred.fr,2014:r.js'] = $r;
     }
     if(typeof(window.$r) !== 'undefined' && window.$r !== $r) {
@@ -48,7 +48,7 @@
   }
 
   if(typeof(module) !== 'undefined') {
-    if($r === undefined) $r = loader();
+    if($r === undefined) $r = loader(loaderContext);
     module.exports = $r;
     loaded = true;
   }
@@ -57,7 +57,7 @@
     throw new Error("Could not load require module.");
   }
 
-})(function(){
+})(function(loaderContext){
 
 function RequireError(message, fileName, lineNumber) {
 	this.name = "RequireError";
@@ -278,10 +278,14 @@ function load_script(mod, url, cacheid, script) {
   var id;
   
   function deps_ready(){
+    // FIXME: fix vm.createScript method
     if(false && typeof process == "object" && process.versions.node) {
       console.log("r.js: Execute module " + url + " (use vm.createScript)");
       var vm = require('vm');
       var f = vm.createScript(script, url);
+      loaderContext(f.runInThisContext.bind(f), module, module.exports, module.require, module.require);
+      // FIXME: use runInNewContext instead of runInThisContext in a separate function
+      /*
       var Global = function(){
         this.module = module;
         this.exports = module.exports;
@@ -291,6 +295,7 @@ function load_script(mod, url, cacheid, script) {
       Global.prototype = global;
       var context = new Global();
       f.runInNewContext(context);
+      */
       end_of_execution();
     } else {
       while(id === undefined || window[id] !== undefined) {
@@ -389,5 +394,7 @@ function get_module(mod) {
   if(typeof(mod.id) == 'string') return make_module_object(to_cacheid(mod.id), mod.id);
 }
 
+}, function(_, module, exports, require, $r){
+  return _();
 });
 
