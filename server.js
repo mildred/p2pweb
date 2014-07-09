@@ -57,6 +57,8 @@ function registerSeedCallback(cb){
 }
 
 var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num, timeout) {
+  // FIXME: remove contact from list if too much failure (avoid spamming)
+  // (and check the rest of the code for such occurences)
   num = num || 0;
   timeout = timeout || 5000;
   var seeds = dht.getSeeds();
@@ -165,17 +167,13 @@ function refreshSites(sitelist, defaultRefresh){
     var nextRefresh;
     if(!lastRefresh || lastRefresh + refresh < now) {
       nextRefresh = now + refresh;
-      refreshSite(site);
+      storage.refreshSite(site);
     } else {
       nextRefresh = lastRefresh + refresh;
     }
     if(nextRefresh < minNextRefresh) minNextRefresh = nextRefresh;
   }
   return minNextRefresh - new Date();
-}
-
-function refreshSite(site) {
-  //rpc.
 }
 
 var server = http.Server(app.app);

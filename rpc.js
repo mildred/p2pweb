@@ -170,9 +170,10 @@ RPC.prototype._sendKad = function(type, endpoint, data, callback) {
   return this.request(endpoint, request, 30, callback);
 };
 
-RPC.prototype.request = function(endpoint, request, timeout, callback) {
+RPC.prototype.request = function(endpoint, request, timeout, callback, callback2) {
   if(typeof endpoint != 'string') throw new Error("Invalid endpoint " + endpoint);
   if(typeof timeout == 'function') {
+    callback2 = callback;
     callback = timeout;
     timeout = undefined;
   }
@@ -194,16 +195,19 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
     if(timedOut)  return;
     if(err) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
+      if(callback2) return callback2(err);
       return callback(err);
     }
     
     var response = [];
     
     utp.on('data', function(resdata){
+      if(callback2) return callback(resdata);
       response.push(resdata);
     });
     
     utp.on('end', function(){
+      if(callback2) return callback2();
       var resBuffer = Buffer.concat(response);
   
       try {
@@ -235,6 +239,7 @@ RPC.prototype.request = function(endpoint, request, timeout, callback) {
   
   function onTimeOut(){
     timedOut = true;
+    if(callback2) return callback2(new Error('timeout'));
     callback(new Error('timeout'));
   }
 };
@@ -243,8 +248,8 @@ RPC.prototype.getPublicURL = function(endpoint, timeout, cb) {
   return this.request(endpoint, {request: "publicURL"}, timeout, cb);
 };
 
-RPC.prototype.getObject = function(endpoint, fid, timeout, cb) {
-  return this.request(endpoint, {request: "object", fid: fid}, timeout, cb);
+RPC.prototype.getObject = function(endpoint, fid, timeout, cbdata, cbend) {
+  return this.request(endpoint, {request: "object", fid: fid}, timeout, cbdata, cbend);
 };
 
 RPC.prototype.ping = function(addr, data, cb) { return this._sendKad('ping', addr, data, cb); };

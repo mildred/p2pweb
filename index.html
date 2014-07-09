@@ -1,21 +1,25 @@
 <html>
 <head>
   <link rel="stylesheet" href="style.css">
-  <script src="/js/require.js"></script>
+  <script src="js/r.js" data-main="js/main"></script>
+  <!--script src="js/require.js"></script-->
   <!--script src="/js/tinymce/tinymce.min.js"></script-->
-  <script src="/js/tinymce-dev/js/tinymce/tinymce.js"></script>
-  <script src="/js/jsencrypt/jsencrypt.min.js"></script>
-  <script src="/js/jsrsasign/jsrsasign-latest-all-min.js"></script>
-  <script src="/js/showhide.js"></script>
-  <script src="/js/signedheader.js"></script>
-  <script src="/js/main.js"></script>
+  <script src="js/tinymce-dev/js/tinymce/tinymce.js"></script>
+  <script src="js/jsencrypt/jsencrypt.min.js"></script>
+  <script src="js/jsrsasign/jsrsasign-latest-all-min.js"></script>
+  <script src="js/showhide.js"></script>
+  <script src="js/signedheader.js"></script>
+  <!--script src="js/main.js"></script-->
 </head>
 <body>
   <nav>
     <ul class="menu">
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
-      <li><a class="showhide" href="#!/site/open">Open Existing Website</a></li>
-      <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
+      <li><a class="showhide" href="#!/site/open">Open Existing Website</a>
+        <ul>
+          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
+        </ul>
+      </li>
     </ul>
   </nav>
   <section class="showhide" id="section-website">

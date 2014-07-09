@@ -140,6 +140,7 @@ function require(identifier, callback){
   function load(source){
     var module = cache[cacheid] = descriptor;
     module.exports = {};
+    module.require = require;
     module.ready = false;
     module._readyCallbacks = [];
     
@@ -325,29 +326,37 @@ window.addEventListener('load', function(){
 
 // INFO Exporting require to global scope
 
-if (window.require !== undefined)
-throw new SmoothieError('\'require\' already defined in global scope');
+if (window.require !== undefined) {
+  console.error('\'require\' already defined in global scope');
+  //throw new RequireError('\'require\' already defined in global scope');
 
-try {
-  Object.defineProperty(window, 'require', {'value':require});
-  Object.defineProperty(window.require, 'resolve', {'value':resolve});
-  Object.defineProperty(window.require, 'load', {'value':load});
-  Object.defineProperty(window.require, 'paths', {'get':function(){return paths.slice(0);}});
-  Object.defineProperty(window.require, 'cache', {'get':function(){return cache;}});
-}
-catch (e) {
-  // NOTE IE8 can't use defineProperty on non-DOM objects, so we have to fall
-  //      back to unsave property assignments in this case.
-  window.require = require;
-  window.require.resolve = resolve;
-  window.require.paths = paths.slice(0);
-  window.require.cache = cache;
-  // NOTE We definetly need a getter for the cache, so we make the the cache a
-  //      DOM-object in IE8.
-  cache = document.createElement('DIV');
+} else {
+
+  try {
+    Object.defineProperty(window, 'require', {'value':require});
+    Object.defineProperty(window.require, 'resolve', {'value':resolve});
+    Object.defineProperty(window.require, 'load', {'value':load});
+    Object.defineProperty(window.require, 'paths', {'get':function(){return paths.slice(0);}});
+    Object.defineProperty(window.require, 'cache', {'get':function(){return cache;}});
+  }
+  catch (e) {
+    // NOTE IE8 can't use defineProperty on non-DOM objects, so we have to fall
+    //      back to unsave property assignments in this case.
+    window.require = require;
+    window.require.resolve = resolve;
+    window.require.paths = paths.slice(0);
+    window.require.cache = cache;
+    // NOTE We definetly need a getter for the cache, so we make the the cache a
+    //      DOM-object in IE8.
+    cache = document.createElement('DIV');
+  }
+
 }
 
 // INFO Parsing module root paths
+
+console.log("paths: ");
+console.log(paths);
 
 for (var i=0; i<paths.length; i++) {
   parser.href = paths[i];

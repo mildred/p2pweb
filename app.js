@@ -38,7 +38,7 @@ app.get('/tools-ws.html', function(req, res){
 
 app.put('/obj/:fid', function(req, res){
   var fid = req.params.fid.toLowerCase();
-  storage.putObject(fid, req, function(code, title, message){
+  storage.putObjectHTTP(fid, req, function(code, title, message){
     res.setHeader("Content-Type", "text/plain");
     res.writeHead(code, title);
     res.end(message);

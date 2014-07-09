@@ -29,7 +29,8 @@ var register_file = function(fid, path, metadata, h){
     all_ids        = all_signed_ids.concat(all_extra_ids)
 
     sitelist[fid] = {
-      metadata: metadata,
+      id:         fid,
+      metadata:   metadata,
       signed_ids: all_signed_ids,
       extra_ids:  all_extra_ids,
       all_ids:    all_ids,
@@ -126,8 +127,23 @@ var addfile = function(file) {
   });
 };
 
-var putObject = function(fid, req, callback){
-  var headers = req.headers;
+var putObjectHTTP = function(fid, req, callback){
+  putObject(fid, req.headers, function(err, ondata, onend){
+    if(err) return callback(err.statusCode, err.statusMessage, err);
+    
+    req.on('data', ondata);
+    req.on('end',  function(){
+      onend(end);
+    });
+  }, end);
+  
+  function end(e){
+    if(e) return callback(e.statusCode, e.statusMessage, e);
+    return callback(201, "Created", fid);
+  }
+};
+
+function putObject(fid, headers, callback, cberror) {
   var filename = path.join(datadir, fid);
   var filename_meta = filename + ".meta";
   var is_p2pws = isp2pws(headers);
@@ -135,80 +151,97 @@ var putObject = function(fid, req, callback){
     var fh = fs.createWriteStream(filename_temp);
     var sum = crypto.createHash('sha1');
     var data = [];
+    var stop = false;
+    
     if(err) {
-      callback(500, "Internal Error", err);
-    } else {
-      fh.on('error', function(e){
-        if(callback) callback(500, "Internal Error", err);
-        callback = null;
-      })
-      req.on('data', function(d){
-        sum.update(d);
-        fh.write(d);
-        if(is_p2pws) data.push(d);
-      });
-      req.on('end', function(d){
-        fh.end();
-        if(!callback) {
-          fs.unlink(filename_temp, logerror);
-          return;
-        }
+      err.statusCode = 500;
+      err.statusMessage = "Internal Error";
+      return callback(err);
+    }
+    callback(null, ondata, onend);
+    
+    fh.on('error', function(e){
+      e.statusCode = 500;
+      e.statusMessage = "Internal Error";
+      if(cberror) cberror(500, "Internal Error", e);
+      stop = true;
+    })
 
-        var digest = sum.digest('hex');
-        var real_fid = digest;
-        var all_signed_ids = [real_fid];
-        var h;
-        if(is_p2pws){
-          h = new SignedHeader(sha1sum, verifysign);
-          h.parseText(Buffer.concat(data).toString());
-          real_fid = h.getFirstId();
-          all_signed_ids = h.getSectionsIds(true);
-        }
+    function ondata(d){
+      sum.update(d);
+      fh.write(d);
+      if(is_p2pws) data.push(d);
+    }
+    
+    function onend(cb) {
+      fh.end();
+      if(stop) {
+        fs.unlink(filename_temp, logerror);
+        return;
+      }
 
-        if(real_fid != fid) {
-          fs.unlink(filename_temp, logerror);
-          console.log("400 Bad Request: Incorrect Identifier, expected " + real_fid + " instad of " + fid);
-          callback(400, "Bad Request", "Incorrect Identifier, expected " + real_fid + " instad of " + fid);
-          return;
+      var digest = sum.digest('hex');
+      var real_fid = digest;
+      var all_signed_ids = [real_fid];
+      var h;
+      if(is_p2pws){
+        h = new SignedHeader(sha1sum, verifysign);
+        h.parseText(Buffer.concat(data).toString());
+        real_fid = h.getFirstId();
+        all_signed_ids = h.getSectionsIds(true);
+      }
+
+      if(real_fid != fid) {
+        fs.unlink(filename_temp, logerror);
+        var e = new Error("400 Bad Request: Incorrect Identifier, expected " + real_fid + " instad of " + fid);
+        e.statusCode = 400;
+        e.statusMessage = "Bad Request";
+        console.error(e);
+        return cb(e);
+      }
+      
+      if(is_p2pws){
+        var would_loose = [];
+        var actual_ids = (filelist[real_fid] || {}).signed_ids || [];
+        for(var i = 0; i < actual_ids.length; i++) {
+          var loose = true;
+          for(var j = 0; j < all_signed_ids.length && loose; j++) {
+            if(actual_ids[i] == all_signed_ids[j]) loose = false;
+          }
+          if(loose) would_loose.push("#" + i + ": " + actual_ids[i]);
         }
         
-        if(is_p2pws){
-          var would_loose = [];
-          var actual_ids = (filelist[real_fid] || {}).signed_ids || [];
-          for(var i = 0; i < actual_ids.length; i++) {
-            var loose = true;
-            for(var j = 0; j < all_signed_ids.length && loose; j++) {
-              if(actual_ids[i] == all_signed_ids[j]) loose = false;
-            }
-            if(loose) would_loose.push("#" + i + ": " + actual_ids[i]);
-          }
-          
-          if(would_loose.length > 0) {
-            console.log("400 Bad Request: P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
-            callback(400, "Bad Request", "P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
-            return;
-          }
+        if(would_loose.length > 0) {
+          var e = new Error("400 Bad Request: P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
+          e.httpStatus = 400;
+          e.statusMessage = "Bad Request";
+          console.error(e);
+          return cb(e);
         }
-        
-        fs.rename(filename_temp, filename, function(e) {
-          if(e) {
-            callback(500, "Internal Error", "Could not rename " + e);
-            return;
-          }
-          var metadata = {
-            headers: { "content-type": headers["content-type"] }
-          };
-          register_file(fid, filename, metadata, h);
-          callback(201, "Created", fid);
-          fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
-        });
+      }
+      
+      fs.rename(filename_temp, filename, function(e) {
+        if(e) {
+          var e = new Error("500 Internal Error: Could not rename " + e);
+          e.httpStatus = 500;
+          e.statusMessage = "Internal Error";
+          console.error(e);
+          return cb(e);
+        }
+        var metadata = {
+          headers: { "content-type": headers["content-type"] }
+        };
+        register_file(fid, filename, metadata, h);
+        cb(null, fid);
+        fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
       });
     }
-  });
-};
+  });  
+}
 
 // getObject: fetch an object, either from the cache or from the DHT.
 // FIXME: don't transmit full data but transmit in chunks
+// FIXME: store in cache
 // cb(err, data, metadata)
 //
 var getObject = function(dht, rpc, fid, cb) {
@@ -266,9 +299,49 @@ var getObject = function(dht, rpc, fid, cb) {
   });
 };
 
+function refreshSite(rpc, site) {
+  dht.getall(kad.Id.fromHex(site.id), function(err, data){
+    if(err) return console.error("Refresh site " + site.id + " error: " + err);
+    if(!data) return console.log("Refresh site " + site.id + ": no data");
+    console.log("Refresh site " + site.id + ": network responded " + JSON.stringify(data));
+
+    var max_rev_available = site.revision + 1;
+    var source_addresses = [];
+    for(var k in data) {
+      var d = data[k];
+      if(!d.file_at || !d.revision || d.revision < max_rev_available) continue;
+      if(d.revision > max_rev_available) {
+        max_rev_available = d.revision;
+        source_addresses = [];
+      }
+      source_addresses.push(d.file_at);
+    }
+    
+    var source = random.value(source_addresses);
+    console.log("Refresh site " + site.id + ": Choose " + source + " in " + JSON.stringify(source_addresses));
+    
+    rpc.getObject(source, fid, function(err, reply){
+      if(err) return console.error("Refresh site " + site.id + " error contacting " + source + ": " + err);
+      console.log("Refresh site " + site.id + ": " + source + " responded with " + reply.data.length + " bytes");
+        
+      // FIXME: store in chunks
+      putObject(fid, reply.metadata.headers, function(err, ondata, onend){
+        if(err) return storeEnd(err);
+        ondata(reply.data);
+        onend(storeEnd);
+      }, storeEnd);
+      
+      function storeEnd(e){
+        // FIXME: on error, try another source
+      }
+    });
+  });
+}
+
 module.exports = {
   getObject: getObject,
-  putObject: putObject,
+  putObjectHTTP: putObjectHTTP,
+  refreshSite: refreshSite,
   filelist:  filelist,
   sitelist:  sitelist,
   setDataDir: function(dir){
