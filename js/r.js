@@ -20,7 +20,44 @@
 
 'use strict';
 
-var $require = (function(){
+(function(loader){
+
+  var loaded = false;
+  var $r;
+  
+  if(typeof window !== 'undefined') {
+    if(window['tag:mildred.fr,2014:r.js'] !== undefined) {
+      $r = window['tag:mildred.fr,2014:r.js'];
+    } else {
+      $r = loader();
+      window['tag:mildred.fr,2014:r.js'] = $r;
+    }
+    if(typeof(window.$r) !== 'undefined' && window.$r !== $r) {
+      throw new Error("window.$r already defined.");
+    }
+    window.$r = $r;
+    loaded = true;
+    if(typeof(window.require) === 'undefined') {
+      window.require = window.$r;
+    } else {
+      if(typeof process == "object" && process.versions.node)
+        console.log("r.js: window.require already defined (probably node require)");
+      else
+        console.warn("r.js: window.require already defined");
+    }
+  }
+
+  if(typeof(module) !== 'undefined') {
+    if($r === undefined) $r = loader();
+    module.exports = $r;
+    loaded = true;
+  }
+
+  if(!loaded) {
+    throw new Error("Could not load require module.");
+  }
+
+})(function(){
 
 function RequireError(message, fileName, lineNumber) {
 	this.name = "RequireError";
@@ -43,48 +80,65 @@ if(window) {
 }
 
 var my_script_tag;
-if(document.currentScript) {
-  my_script_tag = document.currentScript;
-} else {
-  var maxScore = 0;
-  var scripts = document.getElementsByTagName("script");
-  for(var i = 0; i < scripts.length; i++) {
-    if(!scripts[i].hasAttribute("src")) continue;
-    var src = scripts[i].getAttribute("src");
-    var txt = scripts[i].innerHTML;
-    var score = 0;
-    if(/r\.js$/.test(src) || /r\.js/.test(scripts[i].className)) score = 4;
-    else if(/require/.test(src)) score = 1;
-    if(scripts[i].hasAttribute("data-main")) score++;
-    else if(/require/.test(txt)) score+=2;
-    else if(/\S/.test(txt)) score++;
-    if(score >= maxScore) {
-      my_script_tag = scripts[i];
-      maxScore      = score;
+if(typeof(window) !== 'undefined' && typeof(window.document) !== 'undefined') {
+  if(window.document.currentScript !== undefined) {
+    my_script_tag = window.document.currentScript;
+  } else {
+    var maxScore = 0;
+    var scripts = window.document.getElementsByTagName("script");
+    for(var i = 0; i < scripts.length; i++) {
+      if(!scripts[i].hasAttribute("src")) continue;
+      var src = scripts[i].getAttribute("src");
+      var txt = scripts[i].innerHTML;
+      var score = 0;
+      if(/r\.js$/.test(src) || /r\.js/.test(scripts[i].className)) score = 4;
+      else if(/require/.test(src)) score = 1;
+      if(scripts[i].hasAttribute("data-main")) score++;
+      else if(/require/.test(txt)) score+=2;
+      else if(/\S/.test(txt)) score++;
+      if(score >= maxScore) {
+        my_script_tag = scripts[i];
+        maxScore      = score;
+      }
     }
+    console.log("Detect window.document.currentScript:");
+    console.log(my_script_tag);
   }
 }
-if(my_script_tag.hasAttribute("data-main")) {
-  var main = my_script_tag.getAttribute("data-main");
-  require_async_single(main);
-}
-if(/\S/.test(my_script_tag.innerHTML)) {
-  var src = my_script_tag.innerHTML;
-  load_script("", window.location.path, "$", src);
+if(my_script_tag && !my_script_tag.r_js_executed) {
+  my_script_tag.r_js_executed = true;
+  if(my_script_tag.hasAttribute("data-main")) {
+    var main = my_script_tag.getAttribute("data-main");
+    require_async_single(main);
+  }
+  if(/\S/.test(my_script_tag.innerHTML)) {
+    var src = my_script_tag.innerHTML;
+    load_script("", window.location.path, "$", src);
+  }
 }
 
-var req = require.bind(this, "");
-req.async = require_async.bind(this, "");
-req.resolve = resolve;
-return req;
+return make_$r("");
 
-function require(context, mod) {
-  if(mod instanceof Array) {
-    console.trace("Unsuppored use of require");
-    throw new RequireError("Unsupported require([])");
+function make_$r(context) {
+  var $r = require_sync.bind(this, context);
+  $r.async = require_async.bind(this, context);
+  $r.onload = register_load_handler;
+  $r.module = get_module;
+  return $r
+}
+
+function require_sync(context, mod) {
+  if(typeof(mod) !== 'string') {
+    console.trace("Unsuppored use of require, should use with string only");
+    throw new RequireError("Unsupported require(" + typeof(mod) + ")");
   }
   var mod = resolve(context, mod);
   var cacheid = to_cacheid(mod);
+  if(typeof process == "object" && process.versions.node) {
+    // NodeJS or NodeWebKit: use the synchronious require anyway
+    console.log("r.js: late node require " + mod);
+    require_node(cacheid, mod);
+  }
   if(cache[cacheid] !== undefined && cache[cacheid].exports !== undefined) {
     return cache[cacheid].exports;
   } else {
@@ -109,6 +163,7 @@ function require_async(context) {
 }
 
 function resolve(context, mod) {
+  if(typeof process == "object" && process.versions.node) return mod;
   if(!/^\.\//.test(mod)) return mod;
   var c = "/" + context;
   var c = c.replace(/\/[^\/]+$/g, "");
@@ -124,6 +179,8 @@ function resolve(context, mod) {
 }
 
 function to_cacheid(mod) {
+  if(typeof process == "object" && process.versions.node)
+    return "$" + (require.resolve || global.require.resolve)(mod);
   return "$" + to_url(mod);
 }
 
@@ -136,13 +193,24 @@ function require_async_single(mod) {
   if(cache[cacheid] !== undefined) return;
   cache[cacheid] = {}
   
-  if(typeof(module) !== "undefined" && typeof(module.require) !== "undefined") {
-    // NodeJS, use the synchronious require anyway
-    cache[cacheid].exports = module.require(mod);
+  if(typeof process == "object" && process.versions.node) {
+    // NodeJS or NodeWebKit: use the synchronious require instead. Do nothing.
+    console.log("r.js: node require " + mod);
+    require_node(cacheid, mod);
   } else {
     var url = to_url(mod);
     //console.log("Loading module " + mod + " from: " + url);
     get_script(mod, url, cacheid, load_script.bind(this, mod, url, cacheid));
+  }
+}
+
+function require_node(cacheid, mod) {
+  console.log("r.js: node resolve " + mod + " to " + global.require.resolve(mod));
+  if(cache[cacheid] === undefined) cache[cacheid] = {}
+  cache[cacheid].exports = require(mod);
+  if(cache[cacheid].loaded === undefined) {
+    cache[cacheid].loaded  = true;
+    process.nextTick(execute_callbacks);
   }
 }
 
@@ -191,13 +259,14 @@ function load_script(mod, url, cacheid, script) {
   try {
     var headerFunc = new Function('require', header);
   } catch(e) {
-    console.error("Error " + e + " loading code:");
+    console.error("Error loading header code");
+    console.error(e.toString());
     console.error(header);
     throw e;
   }
   var dependentMods = [];
   //console.log("Extracting dependencies for module " + mod + ": " + header);
-  try {
+  //try {
     headerFunc(function(m){
       var m2 = resolve(mod, m);
       require_async_single(m2);
@@ -205,34 +274,17 @@ function load_script(mod, url, cacheid, script) {
       //console.log("require: " + mod + " depends on " + m);
       return {};
     });
-  } catch(e) {
-    console.error("Error " + e + " executing code:");
-    console.error(header);
-    throw e;
-  }
+  //} catch(e) {
+  //  console.error("Error executing header code");
+  //  console.error(e.toString());
+  //  console.error(e.stack);
+  //  console.error(header);
+  //  throw e;
+  //}
   cache[cacheid].depends = dependentMods;
   
-  var module = {
-    exports: {},
-    require: require.bind(this, mod)
-  };
-  module.require.async  = require_async.bind(this, mod);
-  module.require.onload = register_load_handler;
-  
-  Object.defineProperty(module, 'loaded', {
-    get:function(){
-      return cache[cacheid].loaded;
-    },
-    set:function(loaded){
-      if(cache[cacheid].loaded !== undefined && cache[cacheid].loaded !== false) {
-        throw new RequireError("Cannor unload module " + mod);
-      }
-      cache[cacheid].loaded = loaded;
-      if(loaded) {
-        setTimeout(execute_callbacks, 0);
-      }
-    }
-  });
+  var module = make_module_object(cacheid, mod);
+  module.exports = {};
 
   var id;
   while(id === undefined || window[id] !== undefined) {
@@ -252,19 +304,44 @@ function load_script(mod, url, cacheid, script) {
   }
   
   function deps_ready(){
-    add_code('window[' + JSON.stringify(id) + '](function(global, module, exports, require){if(true){' + script + '\n} return {m:module, e:exports}; });\n//# sourceURL='+url);
+    add_code('window[' + JSON.stringify(id) + '](function(global, module, exports, require, $r){if(true){' + script + '\n} return {m:module, e:exports}; });\n//# sourceURL='+url);
   }
   
   function code_ready(f){
     console.log("r.js: Execute module " + url);
     delete window[id];
-    f.apply(module.exports, [window, module, module.exports, module.require]);
+    f.apply(module.exports, [window, module, module.exports, module.require, module.require]);
     cache[cacheid].exports = module.exports
     if(cache[cacheid].loaded === undefined) {
       cache[cacheid].loaded = true
       execute_callbacks();
     }
   }
+}
+
+function make_module_object(cacheid, cur_mod) {
+  var module = {
+    exports: cache[cacheid].exports,
+    require: make_$r(cur_mod),
+    engine: 'r.js'
+  };
+  
+  Object.defineProperty(module, 'loaded', {
+    get:function(){
+      return cache[cacheid].loaded;
+    },
+    set:function(loaded){
+      if(cache[cacheid].loaded !== undefined && cache[cacheid].loaded !== false) {
+        throw new RequireError("Cannot unload module " + cur_mod);
+      }
+      cache[cacheid].loaded = loaded;
+      if(loaded) {
+        setTimeout(execute_callbacks, 0);
+      }
+    }
+  });
+  
+  return module;
 }
 
 function execute_callbacks(){
@@ -285,7 +362,7 @@ function execute_callbacks(){
 
 function extract_header(s) {
   var ws = /([\s\n]+|\/\/[^\n]*|\/\*.*?\*\/)+/.source;
-  var req = /require\([^\(\)]+\)(\s?\.\s?\S*|\s?\[[^\[\]]*\])?/.source;
+  var req = /(\$r|require)\([^\(\)]+\)(\s?\.\s?\S*|\s?\[[^\[\]]*\])?/.source;
   var header = /^(\s?((var\s)?\S+\s?=\s?)?require(\s?,\s?\S+\s?=\s?require)*\s?;)+/.source;
   header = new RegExp(header.replace(/require/g, "(" + req + ")").replace(/\\s/g, "(" + ws + ")"));
   var cap = header.exec(s);
@@ -304,21 +381,11 @@ function register_load_handler(fun) {
   if(already_loaded) setTimeout(fun, 0);
 }
 
-})();
-
-if(typeof window !== 'undefined') {
-  if(typeof(window.$r) !== 'undefined') {
-    throw new Error("window.$r already defined.");
-  }
-  window.$r = $require
-  if(typeof(window.require) !== 'undefined') {
-    window.require = $require;
-  } else {
-    console.error("window.require already defined");
-  }
-} else if(typeof(module) !== 'undefined') {
-  module.exports = $require;
-} else {
-  throw new Error("Could not load require module.");
+function get_module(mod) {
+  if(mod.engine == 'r.js') return mod;
+  if(typeof(mod)    == 'string') return make_module_object(to_cacheid(mod),    mod);
+  if(typeof(mod.id) == 'string') return make_module_object(to_cacheid(mod.id), mod.id);
 }
+
+});
 
