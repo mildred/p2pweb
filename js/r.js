@@ -42,11 +42,35 @@ if(window) {
   });
 }
 
-var scripts = document.getElementsByTagName("script");
-for(var i = 0; i < scripts.length; i++) {
-  if(!scripts[i].hasAttribute("data-main")) continue;
-  var main = scripts[i].getAttribute("data-main");
+var my_script_tag;
+if(document.currentScript) {
+  my_script_tag = document.currentScript;
+} else {
+  var maxScore = 0;
+  var scripts = document.getElementsByTagName("script");
+  for(var i = 0; i < scripts.length; i++) {
+    if(!scripts[i].hasAttribute("src")) continue;
+    var src = scripts[i].getAttribute("src");
+    var txt = scripts[i].innerHTML;
+    var score = 0;
+    if(/r\.js$/.test(src) || /r\.js/.test(scripts[i].className)) score = 4;
+    else if(/require/.test(src)) score = 1;
+    if(scripts[i].hasAttribute("data-main")) score++;
+    else if(/require/.test(txt)) score+=2;
+    else if(/\S/.test(txt)) score++;
+    if(score >= maxScore) {
+      my_script_tag = scripts[i];
+      maxScore      = score;
+    }
+  }
+}
+if(my_script_tag.hasAttribute("data-main")) {
+  var main = my_script_tag.getAttribute("data-main");
   require_async_single(main);
+}
+if(/\S/.test(my_script_tag.innerHTML)) {
+  var src = my_script_tag.innerHTML;
+  load_script("", window.location.path, "$", src);
 }
 
 var req = require.bind(this, "");
@@ -161,6 +185,7 @@ function get_script(mod, url, cacheid, callback){
 }
 
 function load_script(mod, url, cacheid, script) {
+  if(cache[cacheid] === undefined) cache[cacheid] = {}
   cache[cacheid].code = script;
   var header = extract_header(script);
   try {
