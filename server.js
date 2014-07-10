@@ -52,7 +52,6 @@ Server.prototype.start = function(){
   this.utpServer.listen(this.port, this._utpListen.bind(this));
 
   this.http = http.Server(app.app);
-  app.websock.listen(this.http);
 
   this.http.listen(this.port, '0.0.0.0', function(){
     console.log('Server running at http://127.0.0.1:' + this.port + '/');

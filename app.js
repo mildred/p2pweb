@@ -3,20 +3,14 @@ var kad     = require('kademlia-dht');
 var http    = require('http');
 var random  = require('./random');
 var express = require('express');
-var sockets = require('./sockets');
 var storage = require('./storage');
 var sha1sum = require('./sha1sum');
-var KadWsRpc = require('./kadwsrpc');
 var KadUtpRpc = require('./rpc');
-var KadHttpRpc = require('./kadhttprpc');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
 
 var app = express();
-var websock = new sockets.server();
-var kadwsrpc = new KadWsRpc();
 var kadutprpc = new KadUtpRpc();
-var kadhttprpc = new KadHttpRpc();
 var dht;
 
 app.get('/', function(req, res){
@@ -43,10 +37,6 @@ app.put('/obj/:fid', function(req, res){
     res.writeHead(code, title);
     res.end(message);
   });
-});
-
-app.post("/rpc/kad", function(res, req){ // FIXME: argument order is wrong
-  kadhttprpc.handle_request(res, req);
 });
 
 kadutprpc._getObject = function(fid, cb) {
@@ -382,22 +372,9 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
   });
 });
 
-websock.connect('/ws/control', function(request, socket){
-  socket.on('message', function(message) {
-    var data = JSON.parse(message.utf8Data || message.binaryData);
-    console.log(data);
-    socket.send(JSON.stringify(data));
-  });
-});
-
-websock.connect('/ws/kad', function(request, socket){
-  kadwsrpc.websocket_receive(request, socket);
-});
-
 module.exports = {
   kadrpc: kadutprpc,
   app: app,
-  websock: websock,
   storage: storage,
   init: function(datadir) {
     datadir = datadir || (__dirname + '/data');
