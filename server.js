@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var fs         = require('fs');
 var kad        = require('kademlia-dht');
 var app        = require('./app');
 var rpc        = require('./rpc');
@@ -17,13 +18,24 @@ function Server(){
   this.pendingseeds = 0;
   this.port = 1337;
   this.datadir = __dirname + "/data";
+  this.rpc = new rpc(this._rpcGetObject.bind(this));
   // FIXME: make storage return a prototype and create a new object here instead
-  this.storage = require('./storage');
-  // FIXME: make app a prototype and instanciate it here
-  app.initServer(this);
+  this.storage = storage;
+  this.app = app(this, this.rpc, this.storage);
 }
 
 Server.prototype = new events.EventEmitter;
+
+Server.prototype._rpcGetObject = function(fid, cb){
+  if(!this.dht) return cb(Error("DHT not initialized"));
+  var file = this.storage.filelist[fid];
+  if(!file) return cb(Error("File not available"));
+  
+  fs.readFile(file.path, function (err, data) {
+    if(err) return cb(err);
+    cb(null, {data: data.toString(), metadata: file.metadata});
+  });
+};
 
 Server.prototype.setPort = function(p){
   this.port = p;
@@ -51,12 +63,10 @@ Server.prototype.registerSeedCallback = function(cb){
 };
 
 Server.prototype.start = function(){
-  this.utpServer = utp.createServer();
-  app.kadrpc.setUTP(this.utpServer);
-  this.utpServer.listen(this.port, this._utpListen.bind(this));
-
-  this.http = http.Server(app.app);
-
+  this.utp = utp.createServer();
+  this.rpc.setUTP(this.utp);
+  this.utp.listen(this.port, this._utpListen.bind(this));
+  this.http = http.Server(this.app);
   this.http.listen(this.port, '0.0.0.0', function(){
     console.log('Server running at http://127.0.0.1:' + this.port + '/');
   }.bind(this));
@@ -65,7 +75,7 @@ Server.prototype.start = function(){
   this.storage.setDataDir(this.datadir);
 };
 
-Server.prototype.findIPAddress = function(rpc, dht, callback, oldaddr, num, timeout) {
+Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) {
   // FIXME: remove contact from list if too much failure (avoid spamming)
   // (and check the rest of the code for such occurences)
   num = num || 0;
@@ -87,7 +97,7 @@ Server.prototype.findIPAddress = function(rpc, dht, callback, oldaddr, num, time
   
   var retry = setTimeout(tryAgain, timeout);
   
-  rpc.getPublicURL(endpoint, function(err, myaddr){
+  this.rpc.getPublicURL(endpoint, function(err, myaddr){
     clearTimeout(retry);
     if(err) {
       if(!retried) setTimeout(tryAgain, 500);
@@ -98,13 +108,13 @@ Server.prototype.findIPAddress = function(rpc, dht, callback, oldaddr, num, time
     
     function keepAlive(){
       retried = true;
-      return self.findIPAddress(rpc, dht, callback, myaddr, num+1);
+      return self.findIPAddress(dht, callback, myaddr, num+1);
     }
   });
   
   function tryAgain(){
     retried = true;
-    return self.findIPAddress(rpc, dht, callback, oldaddr, num+1, 500);
+    return self.findIPAddress(dht, callback, oldaddr, num+1, 500);
   }
 };
 
@@ -112,7 +122,7 @@ Server.prototype._utpListen = function(){
   var self = this;
   console.log("UTP server running on port " + this.port);
   
-  kad.Dht.spawn(app.kadrpc, [], function(err, dht){
+  kad.Dht.spawn(self.rpc, [], function(err, dht){
     if(err || !dht) {
       return console.log("Kad: DHT error: " + err);
     }
@@ -125,7 +135,7 @@ Server.prototype._utpListen = function(){
         } else {
           console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
         }
-        self.findIPAddress(app.kadrpc, dht, function(myaddr){
+        self.findIPAddress(dht, function(myaddr){
           self._start(dht, myaddr);
         });
       });
@@ -177,7 +187,7 @@ Server.prototype.refreshSites = function(sitelist, defaultRefresh){
     var nextRefresh;
     if(!lastRefresh || lastRefresh + refresh < now) {
       nextRefresh = now + refresh;
-      storage.refreshSite(site);
+      this.storage.refreshSite(site);
     } else {
       nextRefresh = lastRefresh + refresh;
     }

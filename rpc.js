@@ -7,10 +7,11 @@ var UTPMsg = require('./utp_msg');
 
 var EventEmitter = events.EventEmitter;
 
-function RPC(){
+function RPC(getObject){
   this._utpServer = null;
   this._handlers = {};
   this._utpConnections = {};
+  if(getObject) this._getObject = getObject;
 }
 
 RPC._debugc = function(msg){
