@@ -644,8 +644,15 @@ var keytools = require('./keytools'),
     });
   });
 
+  r.on("/status", function(req){
+    document.querySelectorAll("section.showhide").hide();
+    document.querySelectorAll("#section-status").show();
+    
+  });
+
   r.fallback(function(){
     document.querySelectorAll("section.showhide").hide();
+    if(typeof process == "object" && process.versions.node) r.go("#!/status")
   });
 
   r.run();

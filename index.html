@@ -3,6 +3,9 @@
   <link rel="stylesheet" href="style.css">
   <script src="js/r.js">
     require('./js/main');
+    if(typeof process == "object" && process.versions.node) {
+      global.require('./nodewebkit_main');
+    }
   </script>
   <!--script src="js/require.js"></script-->
   <!--script src="/js/tinymce/tinymce.min.js"></script-->
@@ -16,6 +19,7 @@
 <body>
   <nav>
     <ul class="menu">
+      <li><a class="showhide" href="#!/status">Server Status</a></li>
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
       <li><a class="showhide" href="#!/site/open">Open Existing Website</a>
         <ul>
@@ -24,6 +28,9 @@
       </li>
     </ul>
   </nav>
+  <section class="showhide" id="section-status">
+    Status
+  </section>
   <section class="showhide" id="section-website">
     <h1><input type="text" name="title" placeholder="Site Title"/></h1>
     <aside class="meta">

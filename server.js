@@ -6,61 +6,68 @@ var rpc        = require('./rpc');
 var utp        = require('utp');
 var http       = require('http');
 var rand       = require('./random');
+var events     = require('events');
 var storage    = require('./storage');
 var seedclient = require('./seedclient');
 
-var port = 1337;
-var datadir = __dirname + "/data";
-var seeds = [];
-var pendingseeds = 0;
-var seedcallback;
 
-for(var i = 2; i < process.argv.length; i++){
-  var arg = process.argv[i];
-  if(arg == "-port") {
-    port = parseInt(process.argv[++i]);
-  } else if(arg == "-data") {
-    datadir = process.argv[++i];
-  } else if(arg == "-seedlist") {
-    throw new Error("-seedlist not implemented");
-  } else if(arg == "-seed") {
-    addSeed(process.argv[++i]);
-  } else if(parseInt(arg)) {
-    port = parseInt(arg);
-  } else {
-    if(arg != "-help") console.log("Unknown argument " + arg);
-    console.log(process.argv[1] + " [-port PORTNUM] [-data DATADIR] [-seed URL] [-seedlist FILE] [PORTNUM]");
-    console.log(process.argv[1] + " -help");
-    return;
-  }
+module.exports = Server;
+function Server(){
+  this.seeds        = [];
+  this.pendingseeds = 0;
+  this.port = 1337;
+  this.datadir = __dirname + "/data";
 }
 
+Server.prototype = new events.EventEmitter;
 
+Server.prototype.setPort = function(p){
+  this.port = p;
+};
 
-function addSeed(s) {
-  pendingseeds++;
+Server.prototype.setDataDir = function(d){
+  this.datadir = d;
+};
+
+Server.prototype.addSeed = function(s){
+  this.pendingseeds++;
   rpc.normalize(s, function(err, seed2){
     if(err)   console.log(err);
-    if(seed2) seeds.push(seed2);
-    pendingseeds--;
-    if(pendingseeds == 0 && seedcallback) {
-      seedcallback(seeds);
+    if(seed2) this.seeds.push(seed2);
+    this.pendingseeds--;
+    if(this.pendingseeds == 0) {
+      this.emit("seeds", this.seeds)
     }
-  });
-}
+  }.bind(this));
+};
 
-function registerSeedCallback(cb){
-  seedcallback = cb;
-  if(pendingseeds == 0) {
-    cb(seeds);
-  }
-}
+Server.prototype.registerSeedCallback = function(cb){
+  this.on("seeds", cb);
+  if(this.pendingseeds == 0 && this.seeds.length > 0) cb(this.seeds);
+};
 
-var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num, timeout) {
+Server.prototype.start = function(){
+  this.utpServer = utp.createServer();
+  app.kadrpc.setUTP(this.utpServer);
+  this.utpServer.listen(this.port, this._utpListen.bind(this));
+
+  this.http = http.Server(app.app);
+  app.websock.listen(this.http);
+
+  this.http.listen(this.port, '0.0.0.0', function(){
+    console.log('Server running at http://127.0.0.1:' + this.port + '/');
+  }.bind(this));
+
+  console.log('Using data directory at ' + this.datadir);
+  app.init(this.datadir);
+};
+
+Server.prototype.findIPAddress = function(rpc, dht, callback, oldaddr, num, timeout) {
   // FIXME: remove contact from list if too much failure (avoid spamming)
   // (and check the rest of the code for such occurences)
   num = num || 0;
   timeout = timeout || 5000;
+  var self = this;
   var seeds = dht.getSeeds();
   var retried = false;
   if(seeds.length == 0) {
@@ -88,27 +95,26 @@ var findIPAddress = function findIPAddress(rpc, dht, callback, oldaddr, num, tim
     
     function keepAlive(){
       retried = true;
-      return findIPAddress(rpc, dht, callback, myaddr, num+1);
+      return self.findIPAddress(rpc, dht, callback, myaddr, num+1);
     }
   });
   
   function tryAgain(){
     retried = true;
-    return findIPAddress(rpc, dht, callback, oldaddr, num+1, 500);
+    return self.findIPAddress(rpc, dht, callback, oldaddr, num+1, 500);
   }
 };
 
-var utpServer = utp.createServer();
-app.kadrpc.setUTP(utpServer);
-utpServer.listen(port, function(){
-  console.log("UTP server running on port " + port);
+Server.prototype._utpListen = function(){
+  var self = this;
+  console.log("UTP server running on port " + this.port);
   
   kad.Dht.spawn(app.kadrpc, [], function(err, dht){
     if(err || !dht) {
       return console.log("Kad: DHT error: " + err);
     }
     app.initDHT(dht);
-    registerSeedCallback(function(seeds){
+    self.registerSeedCallback(function(seeds){
       console.log("Kad: Bootstrapping with " + seeds);
       dht.bootstrap(seeds, function(err){
         if(err) {
@@ -116,26 +122,27 @@ utpServer.listen(port, function(){
         } else {
           console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
         }
-        findIPAddress(app.kadrpc, dht, function(myaddr){
-          start(dht, myaddr);
+        self.findIPAddress(app.kadrpc, dht, function(myaddr){
+          self._start(dht, myaddr);
         });
       });
     });
   });
-});
+};
 
-function start(dht, myaddr){
+Server.prototype._start = function(dht, myaddr){
   console.log("Found self addr: " + myaddr);
   //console.log("Kad: Publish filelist");
   //console.log(app.storage.filelist);
   for(var fid in app.storage.filelist){
-    publishItem(myaddr, dht, app.storage.filelist[fid], function(err) {
+    this.publishItem(myaddr, dht, app.storage.filelist[fid], function(err) {
       if(err) throw err;
     });
   }
-}
+};
 
-function publishItem(myaddr, dht, f, cb){
+
+Server.prototype.publishItem = function(myaddr, dht, f, cb){
   var data = {
     file_at: myaddr,
     node_id: dht.id.toString(),
@@ -154,9 +161,9 @@ function publishItem(myaddr, dht, f, cb){
     }
   }
   dht.multiset(kad.Id.fromHex(f.id), dht.id.toString(), data, cb);
-}
+};
 
-function refreshSites(sitelist, defaultRefresh){
+Server.prototype.refreshSites = function(sitelist, defaultRefresh){
   defaultRefresh = defaultRefresh || 1000 * 60 * 60; // 1 hour
   var now = new Date();
   var minNextRefresh = now + defaultRefresh;
@@ -174,16 +181,5 @@ function refreshSites(sitelist, defaultRefresh){
     if(nextRefresh < minNextRefresh) minNextRefresh = nextRefresh;
   }
   return minNextRefresh - new Date();
-}
-
-var server = http.Server(app.app);
-app.websock.listen(server);
-
-server.listen(port, '0.0.0.0', function(){
-  console.log('Server running at http://127.0.0.1:' + port + '/');
-});
-
-console.log('Using data directory at ' + datadir);
-app.init(datadir);
-
+};
 

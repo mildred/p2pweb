@@ -51,8 +51,8 @@ start(){
       let j++
     done
     
-    echo server.js -port 245$ii -data data-$ii -seedlist seeds-$ii.txt ">logserver-$ii.log"
-    ../server.js -port 245$ii -data data-$ii $seedargs >server-$ii-$now.log 2>&1 &
+    echo server-cli.js -port 245$ii -data data-$ii -seedlist seeds-$ii.txt ">logserver-$ii.log"
+    ../server-cli.js -port 245$ii -data data-$ii $seedargs >server-$ii-$now.log 2>&1 &
     echo $! >server-$ii.pid
     ln -sf server-$ii-$now.log server-$ii.log
     ln -sf server-$ii-$now.log logserver-$ii.log
