@@ -17,6 +17,10 @@ function Server(){
   this.pendingseeds = 0;
   this.port = 1337;
   this.datadir = __dirname + "/data";
+  // FIXME: make storage return a prototype and create a new object here instead
+  this.storage = require('./storage');
+  // FIXME: make app a prototype and instanciate it here
+  app.initServer(this);
 }
 
 Server.prototype = new events.EventEmitter;
@@ -58,7 +62,7 @@ Server.prototype.start = function(){
   }.bind(this));
 
   console.log('Using data directory at ' + this.datadir);
-  app.init(this.datadir);
+  this.storage.setDataDir(this.datadir);
 };
 
 Server.prototype.findIPAddress = function(rpc, dht, callback, oldaddr, num, timeout) {
@@ -112,7 +116,7 @@ Server.prototype._utpListen = function(){
     if(err || !dht) {
       return console.log("Kad: DHT error: " + err);
     }
-    app.initDHT(dht);
+    self.dht = dht;
     self.registerSeedCallback(function(seeds){
       console.log("Kad: Bootstrapping with " + seeds);
       dht.bootstrap(seeds, function(err){
@@ -132,9 +136,9 @@ Server.prototype._utpListen = function(){
 Server.prototype._start = function(dht, myaddr){
   console.log("Found self addr: " + myaddr);
   //console.log("Kad: Publish filelist");
-  //console.log(app.storage.filelist);
-  for(var fid in app.storage.filelist){
-    this.publishItem(myaddr, dht, app.storage.filelist[fid], function(err) {
+  //console.log(this.storage.filelist);
+  for(var fid in this.storage.filelist){
+    this.publishItem(myaddr, dht, this.storage.filelist[fid], function(err) {
       if(err) throw err;
     });
   }

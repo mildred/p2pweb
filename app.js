@@ -3,15 +3,15 @@ var kad     = require('kademlia-dht');
 var http    = require('http');
 var random  = require('./random');
 var express = require('express');
-var storage = require('./storage');
 var sha1sum = require('./sha1sum');
-var KadUtpRpc = require('./rpc');
+var KadRpc  = require('./rpc');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
 
 var app = express();
-var kadutprpc = new KadUtpRpc();
-var dht;
+var kadrpc = new KadRpc();
+var server;
+var storage;
 
 app.get('/', function(req, res){
   res.sendfile(__dirname + "/index.html");
@@ -39,8 +39,8 @@ app.put('/obj/:fid', function(req, res){
   });
 });
 
-kadutprpc._getObject = function(fid, cb) {
-  if(!dht) return cb(Error("DHT not initialized"));
+kadrpc._getObject = function(fid, cb) {
+  if(!server.dht) return cb(Error("DHT not initialized"));
   var file = storage.filelist[fid];
   if(!file) return cb(Error("File not available"));
   
@@ -64,10 +64,10 @@ var failNotFound = function(res){
 };
 
 app.get("/rpc/seeds", function(req, res){
-  if(!dht) return failDHTNotInitilized(res);
+  if(!server.dht) return failDHTNotInitilized(res);
 
   res.setHeader("Content-Type", "text/plain");
-  var seeds = dht.getSeeds();
+  var seeds = server.dht.getSeeds();
   for(var i = 0; i < seeds.length; i++) {
     var seed = seeds[i];
     res.write(seed.id.toString() + "\t" + seed.endpoint + "\n");
@@ -76,10 +76,10 @@ app.get("/rpc/seeds", function(req, res){
 });
 
 app.get("/rpc/cache", function(req, res){
-  if(!dht) return failDHTNotInitilized(res);
+  if(!server.dht) return failDHTNotInitilized(res);
 
   res.setHeader("Content-Type", "text/plain");
-  var cache = dht.getCache();
+  var cache = server.dht.getCache();
   for(var k1 in cache) {
     var subcache = cache[k1];
     for(var k2 in subcache) {
@@ -90,25 +90,25 @@ app.get("/rpc/cache", function(req, res){
 });
 
 app.get("/rpc/cache.json", function(req, res){
-  if(!dht) return failDHTNotInitilized(res);
+  if(!server.dht) return failDHTNotInitilized(res);
 
   res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(dht.getCache()));
+  res.end(JSON.stringify(server.dht.getCache()));
 });
 
 app.get("/rpc/cache/:k1.json", function(req, res){
-  if(!dht) return failDHTNotInitilized(res);
+  if(!server.dht) return failDHTNotInitilized(res);
 
   res.setHeader("Content-Type", "application/json");
-  var cache = dht.getCache()[req.params.k1] || {};
+  var cache = server.dht.getCache()[req.params.k1] || {};
   res.end(JSON.stringify(cache));
 });
 
 app.get("/rpc/cache/:k1/:k2.json", function(req, res){
-  if(!dht) return failDHTNotInitilized(res);
+  if(!server.dht) return failDHTNotInitilized(res);
 
   res.setHeader("Content-Type", "application/json");
-  var cache = dht.getCache()[req.params.k1] || {};
+  var cache = server.dht.getCache()[req.params.k1] || {};
   res.end(JSON.stringify(cache[req.params.k2] || null));
 });
 
@@ -197,15 +197,15 @@ var proxyFile = function(res2, options){
 // getFile: Get file from DHT
 //
 var getFile = function(fid, cb){
-  return storage.getObject(dht, kadutprpc, fid, cb);
+  return storage.getObject(server.dht, kadrpc, fid, cb);
 };
 
 var redirectObjectNotFound = function(fid, path, res, opts) {
   opts = opts || {};
   res.setHeader("X-File-ID", fid)
   if(path != "") res.setHeader("X-File-Path", path)
-  if(!dht) return failDHTNotInitilized(res);
-  dht.getall(kad.Id.fromHex(fid), function(err, data){
+  if(!server.dht) return failDHTNotInitilized(res);
+  server.dht.getall(kad.Id.fromHex(fid), function(err, data){
     if(err) {
       res.setHeader("Content-Type", "text/plain");
       res.writeHead(500, "Internal Server Error");
@@ -216,8 +216,8 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
       res.writeHead(404, "Not Found");
       res.write("Not Found: no contact to provide the data");
       res.end();
-      //console.log(dht._routes);
-      //console.log(dht._routes.toString());
+      //console.log(server.dht._routes);
+      //console.log(server.dht._routes.toString());
     } else {
       var availableDestinations = {};
       for(k in data) {
@@ -229,7 +229,7 @@ var redirectObjectNotFound = function(fid, path, res, opts) {
       var destination = random.value(availableDestinations);
       //console.log(availableDestinations);
       //console.log(random.key(availableDestinations));
-      kadutprpc.getObject(destination, fid, 3, function(err, reply){
+      kadrpc.getObject(destination, fid, 3, function(err, reply){
         if(err) {
           res.setHeader("Content-Type", "text/plain");
           res.writeHead(502, "Bad Gateway");
@@ -373,16 +373,12 @@ app.get(/^\/obj\/([a-fA-F0-9]*)(,(\*|\+|[0-9]+))?(,[Ps]+)?(\/.*)?$/, function(re
 });
 
 module.exports = {
-  kadrpc: kadutprpc,
+  kadrpc: kadrpc,
   app: app,
-  storage: storage,
-  init: function(datadir) {
-    datadir = datadir || (__dirname + '/data');
-    storage.setDataDir(datadir);
-  },
-  initDHT: function(dht_){
-    console.log("Kad: Initialize DHT");
-    dht = dht_;
+  initServer: function(s) {
+    if(server !== undefined) throw new Error("server already initialized");
+    server  = s;
+    storage = s.storage;
   }
 };
 
