@@ -25,6 +25,7 @@ case "$1" in
     exit 0
   ;;
   *)
+    date
     pull
   ;;
 esac
