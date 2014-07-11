@@ -19,6 +19,7 @@ case "$1" in
   the-rest)
     cd "$root"
     npm install
+    git submodule update --init --checkout --force
     "$PWD/sysvservice.sh" install-deps
     "$PWD/sysvservice.sh" install-init.d
     "$PWD/sysvservice.sh" enable || echo "Error ignored"
