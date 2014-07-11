@@ -247,7 +247,11 @@ case "$command" in
         fi
         ;;
     install-init.d)
-        ln -s "$zero" "/etc/init.d/$sysvservice_name"
+        if ! ln -s "$zero" "/etc/init.d/$sysvservice_name"; then
+          cmp "$zero" "/etc/init.d/$sysvservice_name" >/dev/null
+          exit $?
+        fi
+        exit 0
         ;;
     *)
         echo "Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
