@@ -15,12 +15,12 @@ var seedclient = require('./seedclient');
 module.exports = Server;
 function Server(){
   this.seeds        = [];
+  this.lastContact  = {};
   this.pendingseeds = 0;
   this.port = 1337;
   this.datadir = __dirname + "/data";
   this.rpc = new rpc(this._rpcGetObject.bind(this));
-  // FIXME: make storage return a prototype and create a new object here instead
-  this.storage = storage;
+  this.storage = new storage();
   this.app = app(this, this.rpc, this.storage);
 }
 
@@ -66,6 +66,7 @@ Server.prototype.start = function(){
   this.utp = utp.createServer();
   this.rpc.setUTP(this.utp);
   this.utp.listen(this.port, this._utpListen.bind(this));
+
   this.http = http.Server(this.app);
   this.http.listen(this.port, '0.0.0.0', function(){
     console.log('Server running at http://127.0.0.1:' + this.port + '/');
@@ -76,23 +77,38 @@ Server.prototype.start = function(){
 };
 
 Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) {
-  // FIXME: remove contact from list if too much failure (avoid spamming)
-  // (and check the rest of the code for such occurences)
+  // FIXME: blacklist a contact from the list after too much failures
+  // (don't remote it immediatly, if the problem is on out side we will loose
+  // all our seeds)
   num = num || 0;
   timeout = timeout || 5000;
   var self = this;
   var seeds = dht.getSeeds();
   var retried = false;
-  if(seeds.length == 0) {
-    console.log("No seeds");
-    return setTimeout(tryAgain, Math.min(num, 5) * 1000);
-  }
-
   var seed;
-  while(seed === undefined || seed.id == dht.id) {
-    seed = rand.value(seeds);
+  var now = new Date();
+  
+  while(seed === undefined) {
+    if(seeds.length == 0) {
+      console.log("No seeds");
+      return setTimeout(tryAgain, Math.min(num, 5) * 1000);
+    }
+    
+    var k = rand.key(seeds);
+    seed = seeds[k];
+
+    var lastContact = this.lastContact[seed.endpoint]
+    
+    if(seed.id == dht.id || lastContact && now - lastContact < 60000) {
+      // Exclude ourselves and don't spam
+      seed = undefined;
+      seeds.splice(k, 1);
+    }
   }
+  
+
   var endpoint = seed.endpoint;
+  this.lastContact[endpoint] = now;
   console.log('Request my public URL to ' + endpoint);
   
   var retry = setTimeout(tryAgain, timeout);
@@ -103,6 +119,7 @@ Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) 
       if(!retried) setTimeout(tryAgain, 500);
       return;
     }
+    self.emit("public-address", myaddr.toString(), endpoint);
     if(oldaddr != myaddr) callback(myaddr.toString());
     if(!retried) setTimeout(keepAlive, 20000);
     
@@ -127,6 +144,7 @@ Server.prototype._utpListen = function(){
       return console.log("Kad: DHT error: " + err);
     }
     self.dht = dht;
+    var bootstrapped_once = false;
     self.registerSeedCallback(function(seeds){
       console.log("Kad: Bootstrapping with " + seeds);
       dht.bootstrap(seeds, function(err){
@@ -135,9 +153,12 @@ Server.prototype._utpListen = function(){
         } else {
           console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
         }
-        self.findIPAddress(dht, function(myaddr){
-          self._start(dht, myaddr);
-        });
+        if(!bootstrapped_once) {
+          bootstrapped_once = true;
+          self.findIPAddress(dht, function(myaddr){
+            self._start(dht, myaddr);
+          });
+        }
       });
     });
   });

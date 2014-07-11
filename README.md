@@ -1,7 +1,12 @@
 TODO
 ====
 
-- fix kademlia-dht
+- fix kademlia-dht (done)
+- fix spamming issue when no contacts are reachable (implemented a 20 second
+  limit per contact when unrechable)
+- fix parsing error when contacting a disconected node. Receiving an empty
+  string as a result. Should get notified the connection was unsuccessful.
+  (done, reported the error differently)
 
 Backlinks
 ---------
@@ -27,4 +32,10 @@ backlinks:
   content:       ['reference', 'ABC123']
 
 This can be used to replace a builtin-board.
+
+Messaging
+---------
+
+On a personal website, messages can be posted encrypted, and recipients should
+check regularly to see if there is a message available for decryption.
 

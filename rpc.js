@@ -210,6 +210,12 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
     utp.on('end', function(){
       if(callback2) return callback2();
       var resBuffer = Buffer.concat(response);
+      
+      if(response.length == 0) {
+        // The other end might be disconnected, not receiving any data
+        console.error("RPC: Did not received any response");
+        return callback(new Error("No response"));
+      }
   
       try {
         response = JSON.parse(resBuffer.toString(), kad.JSONReviver);

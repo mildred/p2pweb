@@ -11,6 +11,7 @@
     "freeice": "*",
     "weld": "*",
     "tinymce": "*",
+    "moment": "*",
     "jsencrypt": "git://github.com/travist/jsencrypt.git",
     "utp": "git://github.com/mildred/utp.git",
     "websocket": "git://github.com/mildred/WebSocket-Node.git",

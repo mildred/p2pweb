@@ -3,14 +3,25 @@ require('./blob/Blob');
 require('./localStorage');
 require('./loaded');
 
-var keytools = require('./keytools'),
+var moment   = require("./moment/min/moment-with-langs.min.js"),
+    keytools = require('./keytools'),
     sign     = require('./sign'),
     Router   = require('./router'),
     sha1hex  = require('./sha1hex'),
     pure     = require('./pure/pure').$p,
     saveAs   = require('./filesaver/FileSaver');
 
-(function(){
+function updateMoment(){
+  var times = document.querySelectorAll("time.updated.momentFromNow[datetime]");
+  for(var i = 0; i < times.length; i++) {
+    var time = times[i];
+    time.textContent = moment(time.getAttribute("datetime")).fromNow();
+  }
+}
+updateMoment();
+setInterval(updateMoment, 10000);
+
+module.exports = function(api){
 
   //
   // Local storage
@@ -647,7 +658,16 @@ var keytools = require('./keytools'),
   r.on("/status", function(req){
     document.querySelectorAll("section.showhide").hide();
     document.querySelectorAll("#section-status").show();
-    
+  });
+
+  r.on(/^\/status\/seed\/([0-9a-fA-F]+)\/remove$/, function(req){
+    var seedKey = req[1].toLowerCase();
+    if(confirm("Delete seed " + seedKey + "?")) {
+      api.removeSeed(seedKey, function(e){
+        if(e) alert("Could not remove seed " + seedKey + ":\n" + e);
+      });
+    }
+    history.go(-1);
   });
 
   r.fallback(function(){
@@ -657,5 +677,5 @@ var keytools = require('./keytools'),
 
   r.run();
 
-})();
+};
 

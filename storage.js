@@ -2,24 +2,30 @@ var fs      = require('fs');
 var tmp     = require('tmp');
 var kad     = require('kademlia-dht');
 var path    = require('path');
+var events  = require('events');
 var crypto  = require('crypto');
 var random  = require('./random');
 var sha1sum = require('./sha1sum');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
 
-var datadir = __dirname + '/data';
+function Storage() {
+  this.filelist = {};
+  this.sitelist = {};
+  this.datadir  = __dirname + '/data';
+}
 
-var filelist = {};
-var sitelist = {};
+Storage.prototype = new events.EventEmitter;
 
-var isp2pws = function(headers){
-  return /^application\/vnd.p2pws(;.*)$/.test(headers["content-type"]);
+Storage.prototype.setDataDir = function(dir){
+  this.datadir = dir;
+  this.addfile(dir);
 };
 
-var register_file = function(fid, path, metadata, h){
+Storage.prototype.register_file = function(fid, path, metadata, h){
   // FIXME: refactoring parameters
   //console.log("Register " + fid + " " + path);
+  var self = this;
 
   var all_signed_ids, all_extra_ids, all_ids;
   if(h) {
@@ -28,7 +34,7 @@ var register_file = function(fid, path, metadata, h){
     if(all_extra_ids.last != all_extra_ids[all_extra_ids.length-1]) all_extra_ids.push(all_extra_ids.last);
     all_ids        = all_signed_ids.concat(all_extra_ids)
 
-    sitelist[fid] = {
+    this.sitelist[fid] = {
       id:         fid,
       metadata:   metadata,
       signed_ids: all_signed_ids,
@@ -42,14 +48,14 @@ var register_file = function(fid, path, metadata, h){
     all_ids        = [];
   }
 
-  filelist[fid] = {
+  this.filelist[fid] = {
     id: fid,
     metadata: metadata,
     path: path,
     signed_ids: all_signed_ids,
     extra_ids: all_extra_ids,
     all_ids: all_ids,
-    site: sitelist[fid]
+    site: this.sitelist[fid]
   };
 
   for(var i = 0; i < all_signed_ids.length; i++) {
@@ -62,7 +68,7 @@ var register_file = function(fid, path, metadata, h){
   function registerSubId(id, i, signed){
     console.log("Register " + id + " #" + i + (signed ? "" : "?") + " " + path);
     if(id == fid) return;
-    filelist[id] = {
+    self.filelist[id] = {
       id: fid,
       metadata: metadata,
       path: path,
@@ -74,11 +80,8 @@ var register_file = function(fid, path, metadata, h){
   }
 }
 
-var logerror = function(e) {
-  if(e) console.log(e);
-};
-
-var addfile = function(file) {
+Storage.prototype.addfile = function(file) {
+  var self = this;
   fs.stat(file, function(err, st){
     if(err) {
       console.log("Error " + file + ": " + err);
@@ -88,7 +91,7 @@ var addfile = function(file) {
           console.log("Error " + file + ": " + err);
         } else {
           for(var i = 0; i < files.length; i++) {
-            addfile(path.join(file, files[i]))
+            self.addfile(path.join(file, files[i]))
           }
         }
       });
@@ -117,9 +120,9 @@ var addfile = function(file) {
             all_signed_ids = h.getSectionsIds(true);
             all_extra_ids = h.getSectionsIds(false);
             all_extra_ids.push(all_extra_ids.last);
-            register_file(real_fid, file, metadata, h);
+            self.register_file(real_fid, file, metadata, h);
           } else {
-            register_file(key, file, metadata, null);
+            self.register_file(key, file, metadata, null);
           }
         });
       });
@@ -127,8 +130,8 @@ var addfile = function(file) {
   });
 };
 
-var putObjectHTTP = function(fid, req, callback){
-  putObject(fid, req.headers, function(err, ondata, onend){
+Storage.prototype.putObjectHTTP = function(fid, req, callback){
+  this.putObject(fid, req.headers, function(err, ondata, onend){
     if(err) return callback(err.statusCode, err.statusMessage, err);
     
     req.on('data', ondata);
@@ -143,11 +146,12 @@ var putObjectHTTP = function(fid, req, callback){
   }
 };
 
-function putObject(fid, headers, callback, cberror) {
-  var filename = path.join(datadir, fid);
+Storage.prototype.putObject = function(fid, headers, callback, cberror) {
+  var self = this;
+  var filename = path.join(this.datadir, fid);
   var filename_meta = filename + ".meta";
   var is_p2pws = isp2pws(headers);
-  tmp.tmpName({dir: datadir}, function(err, filename_temp){
+  tmp.tmpName({dir: this.datadir}, function(err, filename_temp){
     var fh = fs.createWriteStream(filename_temp);
     var sum = crypto.createHash('sha1');
     var data = [];
@@ -202,7 +206,7 @@ function putObject(fid, headers, callback, cberror) {
       
       if(is_p2pws){
         var would_loose = [];
-        var actual_ids = (filelist[real_fid] || {}).signed_ids || [];
+        var actual_ids = (self.filelist[real_fid] || {}).signed_ids || [];
         for(var i = 0; i < actual_ids.length; i++) {
           var loose = true;
           for(var j = 0; j < all_signed_ids.length && loose; j++) {
@@ -231,7 +235,7 @@ function putObject(fid, headers, callback, cberror) {
         var metadata = {
           headers: { "content-type": headers["content-type"] }
         };
-        register_file(fid, filename, metadata, h);
+        self.register_file(fid, filename, metadata, h);
         cb(null, fid);
         fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
       });
@@ -244,8 +248,8 @@ function putObject(fid, headers, callback, cberror) {
 // FIXME: store in cache
 // cb(err, data, metadata)
 //
-var getObject = function(dht, rpc, fid, cb) {
-  var f = filelist[fid];
+Storage.prototype.getObject = function(dht, rpc, fid, cb) {
+  var f = this.filelist[fid];
   if(f) {
     console.log("getObject(" + fid + "): file available locally");
     fs.readFile(f.path, function (err, data) {
@@ -299,7 +303,8 @@ var getObject = function(dht, rpc, fid, cb) {
   });
 };
 
-function refreshSite(rpc, site) {
+Storage.prototype.refreshSite = function(rpc, site) {
+  var self = this;
   dht.getall(kad.Id.fromHex(site.id), function(err, data){
     if(err) return console.error("Refresh site " + site.id + " error: " + err);
     if(!data) return console.log("Refresh site " + site.id + ": no data");
@@ -325,7 +330,7 @@ function refreshSite(rpc, site) {
       console.log("Refresh site " + site.id + ": " + source + " responded with " + reply.data.length + " bytes");
         
       // FIXME: store in chunks
-      putObject(fid, reply.metadata.headers, function(err, ondata, onend){
+      self.putObject(fid, reply.metadata.headers, function(err, ondata, onend){
         if(err) return storeEnd(err);
         ondata(reply.data);
         onend(storeEnd);
@@ -338,14 +343,12 @@ function refreshSite(rpc, site) {
   });
 }
 
-module.exports = {
-  getObject: getObject,
-  putObjectHTTP: putObjectHTTP,
-  refreshSite: refreshSite,
-  filelist:  filelist,
-  sitelist:  sitelist,
-  setDataDir: function(dir){
-    datadir = dir;
-    addfile(datadir);
-  }
+function isp2pws(headers){
+  return /^application\/vnd.p2pws(;.*)$/.test(headers["content-type"]);
 }
+
+function logerror(e) {
+  if(e) console.log(e);
+}
+
+module.exports = Storage;

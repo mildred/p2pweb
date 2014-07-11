@@ -2,9 +2,14 @@
 <head>
   <link rel="stylesheet" href="style.css">
   <script src="js/r.js">
-    require('./js/main');
+    var main = require('./js/main');
+    var api  = require('./js/api');
     if(typeof process == "object" && process.versions.node) {
-      global.require('./nodewebkit_main');
+      require.async('./nodewebkit_main', function(api){
+        main(api);
+      });
+    } else {
+      main(api);
     }
   </script>
   <!--script src="js/require.js"></script-->
@@ -29,7 +34,26 @@
     </ul>
   </nav>
   <section class="showhide" id="section-status">
-    Status
+    <h1>Status</h1>
+    <dl>
+      <dt>Public Address:</dt>
+      <dd class="public-addr">
+        <span class="address">protocol://address:port</span>
+        <br/><small>from <span class="remote-address">other-end</span>, checked <time class="updated momentFromNow"></time></small>
+      </dd>
+      <dt>Seeds:</dt>
+      <div class="seeds">
+        <dd class="seed">
+          <span class="seed-url"></span>
+          <small>(<tt class="seed-id"></tt>)</small>
+          <a href="#" class="remove">remove</a>
+        </dd>
+      </div>
+      <dd class="new-seed">
+        Add seed: <input type="text" placeholder="seed url"/><input type="button" value="Ok"/>
+        <br/><small><em>Example: <tt>utp+p2pws://127.0.0.1:24500</tt></em></small>
+      </dd>
+    </dl>
   </section>
   <section class="showhide" id="section-website">
     <h1><input type="text" name="title" placeholder="Site Title"/></h1>

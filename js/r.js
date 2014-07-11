@@ -134,7 +134,9 @@ function require_sync(context, mod) {
   }
   var mod = resolve(context, mod);
   var cacheid = to_cacheid(mod);
-  if(cache[cacheid] !== undefined && cache[cacheid].exports !== undefined) {
+  if(cache[cacheid] !== undefined && cache[cacheid].error !== undefined) {
+    throw cache[cacheid].error;
+  } else if(cache[cacheid] !== undefined && cache[cacheid].exports !== undefined) {
     return cache[cacheid].exports;
   } else {
     throw new RequireError("Module " + mod + " is not preloaded.");
@@ -225,7 +227,9 @@ function get_script(mod, url, cacheid, callback){
     if (request.readyState != 4) {
       return;
     } else if (request.status != 200 && request.status != 0 && !request.responseText) {
-      throw new RequireError('unable to load '+url+" ("+request.status+" "+request.statusText+"): " + request.responseText);
+      var e = new RequireError('unable to load '+url+" ("+request.status+" "+request.statusText+"): " + request.responseText);
+      if(callback) return callback(e);
+      else throw e;
     } else if (locks[cacheid]) {
       console.warn("require.js: module locked: "+mod);
       callback && setTimeout(onLoad, 0);
@@ -241,6 +245,12 @@ function get_script(mod, url, cacheid, callback){
 
 function load_script(mod, url, cacheid, script) {
   if(cache[cacheid] === undefined) cache[cacheid] = {}
+  if(script instanceof RequireError) {
+    cache[cacheid].loaded  = true;
+    cache[cacheid].error   = script;
+    cache[cacheid].exports = script;
+    return;
+  }
   cache[cacheid].code = script;
   var header = extract_header(script);
   try {
@@ -270,6 +280,7 @@ function load_script(mod, url, cacheid, script) {
       mods: dependentMods,
       func: deps_ready
     });
+    execute_callbacks();
   } else {
     //console.log("r.js: Module " + mod + " depends on: " + dependentMods.join(", "));
     deps_ready();
@@ -349,19 +360,25 @@ function make_module_object(cacheid, cur_mod) {
 }
 
 function execute_callbacks(){
+  var unfinished = 0;
   for(var i = 0; i < callbacks.length; i++) {
     var cb = callbacks[i];
     if(!cb) continue;
     var loaded = true;
+    var args = [];
     for(var j = 0; j < cb.mods.length && loaded; j++) {
       var cacheid = to_cacheid(cb.mods[j]);
       loaded = !!cache[cacheid].loaded;
+      args.push(cache[cacheid].exports);
     }
     if(loaded) {
-      callbacks[i].func();
+      callbacks[i].func.apply(this, args);
       callbacks[i] = null;
+    } else {
+      unfinished++;
     }
   }
+  console.log("r.js: still waiting " + unfinished + " callbacks");
 }
 
 function extract_header(s) {
