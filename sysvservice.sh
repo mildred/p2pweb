@@ -224,18 +224,26 @@ case "$command" in
         exec multilog t /var/log/$sysvservice_name
         ;;
     install-deps)
-        if which apt-get >/dev/null 2>&1; then
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get install -y daemontools
-        elif which dnf >/dev/null 2>&1; then
-            dnf install -y daemontools
-        elif which yum >/dev/null 2>&1; then
-            yum install -y daemontools
-        elif which yaourt >/dev/null 2>&1; then
-            yaourt -S daemontools
+        if [ "a$2" = "a-f" ] || ! which svstat >/dev/null 2>&1; then
+          if which apt-get >/dev/null 2>&1; then
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get install -y daemontools
+          elif which dnf >/dev/null 2>&1; then
+              dnf install -y daemontools
+          elif which yum >/dev/null 2>&1; then
+              yum install -y daemontools
+          elif which yaourt >/dev/null 2>&1; then
+              yaourt -S daemontools
+          else
+              echo "Could not install dependencies: unknown system" >&2
+              echo "Debian: could not find apt-get" >&2
+              echo "Red Hat: could not find dnf or yum" >&2
+              echo "ArchLinux: could not find yaourt (need to install from AUR)" >&2
+              exit 1
+          fi
         else
-            echo "Could not install dependencies: unknown system" >&2
-            exit 1
+          echo "daemontools already installed, use -f to force re-installation"
+          exit 0
         fi
         ;;
     install-init.d)
