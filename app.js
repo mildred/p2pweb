@@ -24,6 +24,7 @@ module.exports = function(server, kadrpc, storage){
   app.use('/js/jsencrypt', express.static(__dirname + '/node_modules/jsencrypt/bin'));
   app.use('/js/jssha',     express.static(__dirname + '/node_modules/jssha/src'));
   app.use('/js/pure',      express.static(__dirname + '/node_modules/pure/libs'));
+  app.use('/js/moment',    express.static(__dirname + '/node_modules/moment'));
   app.get('/tools-ws.html', function(req, res){
     res.sendfile(__dirname + "/tools-ws.html");
   });
