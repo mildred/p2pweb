@@ -12,7 +12,7 @@
 ### END INIT INFO
 
 sysvservice_name="p2pwebserver"
-sysvservice_exec="./server.js -port 5555"
+sysvservice_exec="./server-cli.js -port 5555"
 sysvservice_once=false
 
 if [ "$sysvservice_nested" != true ]; then
