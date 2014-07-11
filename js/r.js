@@ -224,10 +224,12 @@ function get_script(mod, url, cacheid, callback){
   if(!callback) return onLoad();
 
   function onLoad() {
+    var ok = (request.status == 200);
+    if(request.status == 0 && request.responseText) ok=true;
     if (request.readyState != 4) {
       return;
-    } else if (request.status != 200 && request.status != 0 && !request.responseText) {
-      var e = new RequireError('unable to load '+url+" ("+request.status+" "+request.statusText+"): " + request.responseText);
+    } else if (!ok) {
+      var e = new RequireError('Unable to load '+url+" ("+request.status+" "+request.statusText+"): " + request.responseText);
       if(callback) return callback(e);
       else throw e;
     } else if (locks[cacheid]) {
@@ -321,7 +323,8 @@ function load_script(mod, url, cacheid, script) {
   function code_ready(f){
     console.log("r.js: Execute module " + url + " (add <script> tag)");
     if(id) delete window[id];
-    f.apply(module.exports, [global, module, module.exports, module.require, module.require]);
+    var g = typeof(global) === 'undefined' ? window : global;
+    f.apply(module.exports, [g, module, module.exports, module.require, module.require]);
     end_of_execution();
   }
   
