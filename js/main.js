@@ -3,7 +3,7 @@ require('./blob/Blob');
 require('./localStorage');
 require('./loaded');
 
-var moment   = require("./moment/min/moment-with-langs.min.js"),
+var moment   = require("./moment/min/moment-with-langs.js"),
     keytools = require('./keytools'),
     sign     = require('./sign'),
     Router   = require('./router'),
