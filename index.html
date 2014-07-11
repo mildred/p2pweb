@@ -1,28 +1,72 @@
 <html>
 <head>
   <link rel="stylesheet" href="style.css">
-  <script src="/js/require.js"></script>
+  <script src="js/r.js">
+    var main = require('./js/main');
+    var api  = require('./js/api');
+    if(typeof process == "object" && process.versions.node) {
+      require.async('./nodewebkit_main', function(api){
+        main(api);
+      });
+    } else {
+      main(api);
+    }
+  </script>
+  <!--script src="js/require.js"></script-->
   <!--script src="/js/tinymce/tinymce.min.js"></script-->
-  <script src="/js/tinymce-dev/js/tinymce/tinymce.js"></script>
-  <script src="/js/jsencrypt/jsencrypt.min.js"></script>
-  <script src="/js/jsrsasign/jsrsasign-latest-all-min.js"></script>
-  <script src="/js/showhide.js"></script>
-  <script src="/js/signedheader.js"></script>
-  <script src="/js/main.js"></script>
+  <script src="js/tinymce-dev/js/tinymce/tinymce.js"></script>
+  <script src="js/jsencrypt/jsencrypt.min.js"></script>
+  <script src="js/jsrsasign/jsrsasign-latest-all-min.js"></script>
+  <script src="js/showhide.js"></script>
+  <script src="js/signedheader.js"></script>
+  <!--script src="js/main.js"></script-->
 </head>
 <body>
   <nav>
     <ul class="menu">
+      <li><a class="showhide" href="#!/status">Server Status</a></li>
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
-      <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
+      <li><a class="showhide" href="#!/site/open">Open Existing Website</a>
+        <ul>
+          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
+        </ul>
+      </li>
     </ul>
   </nav>
+  <section class="showhide" id="section-status">
+    <h1>Status</h1>
+    <dl>
+      <dt>Public Address:</dt>
+      <dd class="public-addr">
+        <span class="address">protocol://address:port</span>
+        <br/><small>from <span class="remote-address">other-end</span>, checked <time class="updated momentFromNow"></time></small>
+      </dd>
+      <dt>Seeds:</dt>
+      <div class="seeds">
+        <dd class="seed">
+          <span class="seed-url"></span>
+          <small>(<tt class="seed-id"></tt>)</small>
+          <a href="#" class="remove">remove</a>
+        </dd>
+      </div>
+      <dd class="new-seed">
+        Add seed: <input type="text" placeholder="seed url"/><input type="button" value="Ok"/>
+        <br/><small><em>Example: <tt>utp+p2pws://127.0.0.1:24500</tt></em></small>
+      </dd>
+    </dl>
+  </section>
   <section class="showhide" id="section-website">
     <h1><input type="text" name="title" placeholder="Site Title"/></h1>
     <aside class="meta">
       At revision <span class="revision"></span>
-      <br/>Key: <span class="key"></span>
+      <br/>Primary Key: <span class="key"></span>
+      <ul>
+        <li class="revitem">Revision <span class="rev-num"></span>: <span class="rev-key"></span> <a href="" class="lnk-rev-view-site">(view site)</a></li>
+      </ul>
     </aside>
+    <p>
+      <a href="" class="lnk-view-source">View source code</a>
+    </p>
     <p>
       <button class="btn-open-pkey">Open Private Key</button>
       <button class="btn-save-pkey">Save Private Key</button>
@@ -43,18 +87,31 @@
       <textarea class="rich" name="body"></textarea>
     </section>
   </section>
+  <section class="showhide" id="section-open-website">
+    <h1>Open Existing Website</h1>
+    <ul>
+      <li><a href=""></a></li>
+    </ul>
+    <p class="website">Website ID:
+      <input type="text" size="40"/>
+    </p>
+    <button class="btn-ok">OK</button>
+  </section>
   <section class="showhide" id="section-new-website">
     <h1>New Website</h1>
     <p class="privkey">Private key:
       <button class="btn-generate">Generate</button>
       <button class="btn-open">Open</button>
-      <button class="btn-save">Save</button>
       <span></span>
-      <input type="file" value="Open from file" style="display:none">
     </p>
-    <p class="website">Website ID:
-      <input type="text" size="40"/>
-      <button class="btn-generate">Generate</button>
+    <p class="website">Website ID: <span></span></p>
+    <p>
+      You need to keep your private key in a secure place. The private key is a
+      file that you can use to update your site. Without it, it is absolutely
+      not possible to update it. If someone steal this key from you, anyone
+      could update your site.
+      <br/>
+      <button class="btn-save">Save Private Key</button>
     </p>
     <button class="btn-ok">OK</button>
   </section>

@@ -1,5 +1,6 @@
 /node_modules/
 /data2/
 /js/tinymce-dev/
+/data100/
 *~
-
+.redo/

@@ -72,7 +72,7 @@ function debug(x){
     console.log("require.js:");
     console.log(x);
   }
-  */
+  //*/
 }
 
 // INFO Module getter
@@ -95,6 +95,7 @@ function require(identifier, callback){
     for(var i = 0; i < identifier.length; i++){
       (function(idx, modname){
         modules.push(require(modname, function(mod){
+          debug("In callback for module " + modname);
           modules[idx] = mod;
           modules_left--;
           if(modules_left == 0) {
@@ -110,13 +111,25 @@ function require(identifier, callback){
 
   var descriptor = resolve(identifier);
   var cacheid = '$'+descriptor.id;
+  var frame = cbstack.last_frame;
   
   if (cache[cacheid]) {
-    if(callback) callback(cache[cacheid].exports);
+    debug("Module already in cache: " + identifier);
+    if(callback) {
+      if(frame) {
+        frame.on_require(identifier);
+        cache[cacheid].onReady(function(){
+          frame.on_load();
+        });
+      }
+      cache[cacheid].onReady(callback);
+      return;
+    }
+    if(!cache[cacheid].ready)
+      throw new Error("Module " + identifier + " not ready, use a callback");
     return cache[cacheid].exports;
   }
   
-  var frame = cbstack.last_frame;
   if(frame && callback) frame.on_require(identifier);
   
   debug(descriptor.uri + " loading");
@@ -127,6 +140,9 @@ function require(identifier, callback){
   function load(source){
     var module = cache[cacheid] = descriptor;
     module.exports = {};
+    module.require = require;
+    module.ready = false;
+    module._readyCallbacks = [];
     
     var last_frame;
     var sub_frame = {
@@ -142,8 +158,13 @@ function require(identifier, callback){
       },
       on_ready: function(){
         this.num_requires = 0;
-        debug(module.uri + " notified ready, run callback");
+        module.ready = true;
+        debug(module.uri + " notified ready, run callbacks");
         callback.apply(cache[cacheid], [cache[cacheid].exports]);
+        var cb;
+        while(cb = module._readyCallbacks.pop()) {
+          cb.apply(cache[cacheid], [cache[cacheid].exports]);
+        }
         if(this.parent) {
           debug(module.uri + " ready, notify parents");
           this.parent.on_load();
@@ -162,6 +183,8 @@ function require(identifier, callback){
       parent: frame
     };
     
+    // Return a function that will mark the module as ready when called and not
+    // before. Bypass other dependencies (?)
     module.wait = function(){
       sub_frame.on_wait();
       var ready = false;
@@ -171,6 +194,13 @@ function require(identifier, callback){
         ready = true;
       };
     }
+    
+    // If the module is already in the cache, this function will take a callback
+    // that will be called when the module is ready.
+    module.onReady = function(callback) {
+      if(module.ready) return callback.apply(cache[cacheid], [cache[cacheid].exports]);
+      module._readyCallbacks.push(callback);
+    };
     
     if(!callback){
       var f = new Function('global', 'module', 'exports', source + '\n//# sourceURL='+module.uri);
@@ -183,7 +213,7 @@ function require(identifier, callback){
     
     module._load_global_module_exports = function(f){
       setup();
-     var res;
+      var res;
       try {
         res = f.apply(module.exports, [window, module, module.exports]);
       } finally {
@@ -296,29 +326,37 @@ window.addEventListener('load', function(){
 
 // INFO Exporting require to global scope
 
-if (window.require !== undefined)
-throw new SmoothieError('\'require\' already defined in global scope');
+if (window.require !== undefined) {
+  console.error('\'require\' already defined in global scope');
+  //throw new RequireError('\'require\' already defined in global scope');
 
-try {
-  Object.defineProperty(window, 'require', {'value':require});
-  Object.defineProperty(window.require, 'resolve', {'value':resolve});
-  Object.defineProperty(window.require, 'load', {'value':load});
-  Object.defineProperty(window.require, 'paths', {'get':function(){return paths.slice(0);}});
-  Object.defineProperty(window.require, 'cache', {'get':function(){return cache;}});
-}
-catch (e) {
-  // NOTE IE8 can't use defineProperty on non-DOM objects, so we have to fall
-  //      back to unsave property assignments in this case.
-  window.require = require;
-  window.require.resolve = resolve;
-  window.require.paths = paths.slice(0);
-  window.require.cache = cache;
-  // NOTE We definetly need a getter for the cache, so we make the the cache a
-  //      DOM-object in IE8.
-  cache = document.createElement('DIV');
+} else {
+
+  try {
+    Object.defineProperty(window, 'require', {'value':require});
+    Object.defineProperty(window.require, 'resolve', {'value':resolve});
+    Object.defineProperty(window.require, 'load', {'value':load});
+    Object.defineProperty(window.require, 'paths', {'get':function(){return paths.slice(0);}});
+    Object.defineProperty(window.require, 'cache', {'get':function(){return cache;}});
+  }
+  catch (e) {
+    // NOTE IE8 can't use defineProperty on non-DOM objects, so we have to fall
+    //      back to unsave property assignments in this case.
+    window.require = require;
+    window.require.resolve = resolve;
+    window.require.paths = paths.slice(0);
+    window.require.cache = cache;
+    // NOTE We definetly need a getter for the cache, so we make the the cache a
+    //      DOM-object in IE8.
+    cache = document.createElement('DIV');
+  }
+
 }
 
 // INFO Parsing module root paths
+
+console.log("paths: ");
+console.log(paths);
 
 for (var i=0; i<paths.length; i++) {
   parser.href = paths[i];
