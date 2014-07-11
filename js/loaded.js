@@ -6,10 +6,10 @@ if(!mod || mod.engine !== 'r.js')
 
 mod.loaded = false;
 
-if(window.loaded) loaded();
-else window.addEventListener('load', loaded);
-
-function loaded(){
+var loaded = function(){
   console.log("loaded.js: Page is loaded");
   mod.loaded = true;
 }
+
+if(window.loaded) loaded();
+else window.addEventListener('load', loaded);
