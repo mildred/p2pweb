@@ -8,7 +8,11 @@ pull(){
   ( cd "$root"
     git pull --ff-only
   )
-  exec "$zero" the-rest
+  if "$zero" the-rest; then
+    echo "Success"
+  else
+    echo "Failure"
+  fi
 }
 
 case "$1" in
@@ -16,11 +20,8 @@ case "$1" in
     cd "$root"
     "$PWD/sysvservice.sh" install-deps
     "$PWD/sysvservice.sh" install-init.d
-    "$PWD/sysvservice.sh" enable
+    "$PWD/sysvservice.sh" enable || echo "Error ignored"
     "$PWD/sysvservice.sh" restart
-
-    echo
-    echo "Success"
     exit 0
   ;;
   *)
