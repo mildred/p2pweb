@@ -9,3 +9,6 @@ git pull --ff-only
 "$PWD/sysvservice.sh" enable
 "$PWD/sysvservice.sh" restart
 
+echo
+echo "Success"
+
