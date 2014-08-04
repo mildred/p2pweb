@@ -7,3 +7,9 @@
 [submodule "js/jsrsasign"]
 	path = js/jsrsasign
 	url = https://github.com/kjur/jsrsasign.git
+[submodule "node_modules/utp"]
+	path = node_modules/utp
+	url = https://github.com/mildred/utp
+[submodule "node_modules/kademlia-dht"]
+	path = node_modules/kademlia-dht
+	url = http://github.com/mildred/kademlia-dht.git
