@@ -13,6 +13,22 @@ module.exports = function(srv){
     }
   };
   
+  api.sendBlob = function(blob, blobid, content_type, cb){
+    throw new Error("Not implemented");
+  };
+
+  api.getBlob = function(blobid, cache, cb) {
+    srv.getObject(blobid, cb);
+  };
+
+  api.getBlobCache = function (blobid, cb) {
+    return api.getBlob(blobid, true, cb);
+  };
+
+  api.getBlobNoCache = function (blobid, cb) {
+    return api.getBlob(blobid, false, cb);
+  };
+  
   return api;
 
 };

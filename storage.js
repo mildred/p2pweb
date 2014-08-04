@@ -22,6 +22,10 @@ Storage.prototype.setDataDir = function(dir){
   this.addfile(dir);
 };
 
+Storage.prototype.addDataDir = function(dir){
+  this.addfile(dir);
+};
+
 Storage.prototype.register_file = function(fid, path, metadata, h){
   // FIXME: refactoring parameters
   //console.log("Register " + fid + " " + path);

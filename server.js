@@ -9,7 +9,6 @@ var http       = require('http');
 var rand       = require('./random');
 var events     = require('events');
 var storage    = require('./storage');
-var seedclient = require('./seedclient');
 
 
 module.exports = Server;
@@ -19,6 +18,7 @@ function Server(){
   this.pendingseeds = 0;
   this.port = 1337;
   this.datadir = __dirname + "/data";
+  this.datadirs = [];
   this.rpc = new rpc(this._rpcGetObject.bind(this));
   this.storage = new storage();
   this.app = app(this, this.rpc, this.storage);
@@ -45,6 +45,10 @@ Server.prototype.setDataDir = function(d){
   this.datadir = d;
 };
 
+Server.prototype.addDataDir = function(d){
+  this.datadirs.push(d);
+};
+
 Server.prototype.addSeed = function(s){
   this.pendingseeds++;
   rpc.normalize(s, function(err, seed2){
@@ -63,17 +67,83 @@ Server.prototype.registerSeedCallback = function(cb){
 };
 
 Server.prototype.start = function(){
+  var self = this;
   this.utp = utp.createServer();
   this.rpc.setUTP(this.utp);
-  this.utp.listen(this.port, this._utpListen.bind(this));
+  self.port = self.port || randomPort();
+  self.utp.listen(self.port, utpListening, tryAgain);
+  
+  function utpListening(){
+    self.http = http.Server(self.app);
+    self.http.once('error', disconnectUTPtryAgain);
+    self.http.listen(self.port, '0.0.0.0', function(){
+    
+      self.http.removeListener('error', disconnectUTPtryAgain);
+      console.log('Server running at http://127.0.0.1:' + self.port + '/');
+      
+      self.emit('listening', self.port);
+      
+      self._spawnDHT();
 
-  this.http = http.Server(this.app);
-  this.http.listen(this.port, '0.0.0.0', function(){
-    console.log('Server running at http://127.0.0.1:' + this.port + '/');
-  }.bind(this));
+      console.log('Using data directory at ' + self.datadir);
+      for(var i = 0; i < self.datadirs.length; i++) {
+        self.storage.addDataDir(self.datadirs[i]);
+      }
+      self.storage.setDataDir(self.datadir);
+    });
+  }
+  
+  function disconnectUTPtryAgain(){
+    self.utp.close();
+    tryAgain();
+  }
+  
+  function tryAgain(){
+    self.port = randomPort();
+    self.utp.listen(self.port, utpListening, tryAgain);
+  }
+  
+  function randomPort(){
+    return rand.int(1024+1, 65535);
+  }
+};
 
-  console.log('Using data directory at ' + this.datadir);
-  this.storage.setDataDir(this.datadir);
+Server.prototype._spawnDHT = function(){
+  var self = this;
+  console.log("UTP server running on port " + this.port);
+  
+  kad.Dht.spawn(self.rpc, [], function(err, dht){
+    if(err || !dht) {
+      return console.log("Kad: DHT error: " + err);
+    }
+    self.dht = dht;
+    var bootstrapped_once = false;
+    self.registerSeedCallback(function(seeds){
+      console.log("Kad: Bootstrapping with " + seeds);
+      dht.bootstrap(seeds, function(err){
+        if(err) {
+          console.log("Kad: DHT bootstrap error " + err);
+        } else {
+          console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
+        }
+        if(!bootstrapped_once) {
+          bootstrapped_once = true;
+          self.findIPAddress(dht, self._publishStorage.bind(self, dht));
+        }
+      });
+    });
+  });
+};
+
+Server.prototype._publishStorage = function(dht, myaddr){
+  console.log("Found self addr: " + myaddr);
+  //console.log("Kad: Publish filelist");
+  //console.log(this.storage.filelist);
+  for(var fid in this.storage.filelist){
+    this.publishItem(myaddr, dht, this.storage.filelist[fid], function(err) {
+      if(err) throw err;
+    });
+  }
 };
 
 Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) {
@@ -135,46 +205,6 @@ Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) 
   }
 };
 
-Server.prototype._utpListen = function(){
-  var self = this;
-  console.log("UTP server running on port " + this.port);
-  
-  kad.Dht.spawn(self.rpc, [], function(err, dht){
-    if(err || !dht) {
-      return console.log("Kad: DHT error: " + err);
-    }
-    self.dht = dht;
-    var bootstrapped_once = false;
-    self.registerSeedCallback(function(seeds){
-      console.log("Kad: Bootstrapping with " + seeds);
-      dht.bootstrap(seeds, function(err){
-        if(err) {
-          console.log("Kad: DHT bootstrap error " + err);
-        } else {
-          console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
-        }
-        if(!bootstrapped_once) {
-          bootstrapped_once = true;
-          self.findIPAddress(dht, function(myaddr){
-            self._start(dht, myaddr);
-          });
-        }
-      });
-    });
-  });
-};
-
-Server.prototype._start = function(dht, myaddr){
-  console.log("Found self addr: " + myaddr);
-  //console.log("Kad: Publish filelist");
-  //console.log(this.storage.filelist);
-  for(var fid in this.storage.filelist){
-    this.publishItem(myaddr, dht, this.storage.filelist[fid], function(err) {
-      if(err) throw err;
-    });
-  }
-};
-
 
 Server.prototype.publishItem = function(myaddr, dht, f, cb){
   var data = {
@@ -217,3 +247,6 @@ Server.prototype.refreshSites = function(sitelist, defaultRefresh){
   return minNextRefresh - new Date();
 };
 
+Server.prototype.getObject = function(fid, cb){
+  this.storage.getObject(this.dht, this.rpc, fid, cb)
+}

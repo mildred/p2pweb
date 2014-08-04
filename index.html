@@ -28,7 +28,7 @@
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
       <li><a class="showhide" href="#!/site/open">Open Existing Website</a>
         <ul>
-          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link">(view)</a></li>
+          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link external">(view)</a></li>
         </ul>
       </li>
     </ul>
@@ -36,6 +36,8 @@
   <section class="showhide" id="section-status">
     <h1>Status</h1>
     <dl>
+      <dt>Listening port:</dt>
+      <dd class="listening-port"><span class="port"></span></dd>
       <dt>Public Address:</dt>
       <dd class="public-addr">
         <span class="address">protocol://address:port</span>
@@ -61,11 +63,11 @@
       At revision <span class="revision"></span>
       <br/>Primary Key: <span class="key"></span>
       <ul>
-        <li class="revitem">Revision <span class="rev-num"></span>: <span class="rev-key"></span> <a href="" class="lnk-rev-view-site">(view site)</a></li>
+        <li class="revitem">Revision <span class="rev-num"></span>: <span class="rev-key"></span> <a href="" class="lnk-rev-view-site external">(view site)</a></li>
       </ul>
     </aside>
     <p>
-      <a href="" class="lnk-view-source">View source code</a>
+      <a href="" class="lnk-view-source internal-popup">View source code</a>
     </p>
     <p>
       <button class="btn-open-pkey">Open Private Key</button>
@@ -74,7 +76,7 @@
     </p>
     <ul class="pagelist">
       <li class="newpage"><a href="#!/site/99/newpage">New Page</a></li>
-      <li class="pageitem"><a href="#!/site/99/page/toto.html" class="edit-link">/toto.html</a> (Revision <span class="section">1</span>, <a href="" class="view-current-link">view current</a>, <a href="" class="view-latest-link">view latest</a>)</li>
+      <li class="pageitem"><a href="#!/site/99/page/toto.html" class="edit-link">/toto.html</a> (Revision <span class="section">1</span>, <a href="" class="view-current-link external">view current</a>, <a href="" class="view-latest-link">view latest</a>)</li>
     </ul>
     <section class="showhide" id="section-website-page">
       <h2><input type="text" name="title" placeholder="Page Title"/></h2>

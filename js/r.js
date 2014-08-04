@@ -22,6 +22,10 @@
 
 (function(loader, loaderContext){
 
+  function log(msg){
+    //console.log(msg);
+  }
+
   var loaded = false;
   var $r;
   
@@ -29,7 +33,7 @@
     if(window['tag:mildred.fr,2014:r.js'] !== undefined) {
       $r = window['tag:mildred.fr,2014:r.js'];
     } else {
-      $r = loader(loaderContext);
+      $r = loader(loaderContext, log);
       window['tag:mildred.fr,2014:r.js'] = $r;
     }
     if(typeof(window.$r) !== 'undefined' && window.$r !== $r) {
@@ -41,14 +45,14 @@
       window.require = window.$r;
     } else {
       if(typeof process == "object" && process.versions.node)
-        console.log("r.js: window.require already defined (probably node require)");
+        log("r.js: window.require already defined (probably node require)");
       else
         console.warn("r.js: window.require already defined");
     }
   }
 
   if(typeof(module) !== 'undefined') {
-    if($r === undefined) $r = loader(loaderContext);
+    if($r === undefined) $r = loader(loaderContext, log);
     module.exports = $r;
     loaded = true;
   }
@@ -57,7 +61,7 @@
     throw new Error("Could not load require module.");
   }
 
-})(function(loaderContext){
+})(function(loaderContext, log){
 
 function RequireError(message, fileName, lineNumber) {
 	this.name = "RequireError";
@@ -101,8 +105,8 @@ if(typeof(window) !== 'undefined' && typeof(window.document) !== 'undefined') {
         maxScore      = score;
       }
     }
-    console.log("Detect window.document.currentScript:");
-    console.log(my_script_tag);
+    log("r.js: Detect window.document.currentScript:");
+    log(my_script_tag);
   }
 }
 if(my_script_tag && !my_script_tag.r_js_executed) {
@@ -194,7 +198,7 @@ function require_async_single(mod) {
 }
 
 function require_node(cacheid, mod) {
-  console.log("r.js: node resolve " + mod + " to " + global.require.resolve(mod));
+  log("r.js: node resolve " + mod + " to " + global.require.resolve(mod));
   if(cache[cacheid] === undefined) cache[cacheid] = {}
   cache[cacheid].exports = require(mod);
   if(cache[cacheid].loaded === undefined) {
@@ -277,7 +281,7 @@ function load_script(mod, url, cacheid, script) {
   module.exports = {};
 
   if(dependentMods.length > 0) {
-    console.log("r.js: Module " + url + " depends on: " + dependentMods.join(", "));
+    log("r.js: Module " + url + " depends on: " + dependentMods.join(", "));
     callbacks.push({
       mods: dependentMods,
       func: deps_ready
@@ -293,7 +297,7 @@ function load_script(mod, url, cacheid, script) {
   function deps_ready(){
     // FIXME: fix vm.createScript method
     if(false && typeof process == "object" && process.versions.node) {
-      console.log("r.js: Execute module " + url + " (use vm.createScript)");
+      log("r.js: Execute module " + url + " (use vm.createScript)");
       var vm = require('vm');
       var f = vm.createScript(script, url);
       loaderContext(f.runInThisContext.bind(f), module, module.exports, module.require, module.require);
@@ -321,7 +325,7 @@ function load_script(mod, url, cacheid, script) {
   }
   
   function code_ready(f){
-    console.log("r.js: Execute module " + url + " (add <script> tag)");
+    log("r.js: Execute module " + url + " (add <script> tag)");
     if(id) delete window[id];
     var g = typeof(global) === 'undefined' ? window : global;
     f.apply(module.exports, [g, module, module.exports, module.require, module.require]);
@@ -381,7 +385,7 @@ function execute_callbacks(){
       unfinished++;
     }
   }
-  console.log("r.js: still waiting " + unfinished + " callbacks");
+  log("r.js: still waiting " + unfinished + " callbacks");
 }
 
 function extract_header(s) {

@@ -2,11 +2,59 @@ var template = require("./js/template");   // r.js
 var server   = global.require("./server"); // nodejs
 var moment   = global.require("./js/moment/min/moment-with-langs.min.js")
 var nodeapi  = global.require("./nodewebkit_api");
+var path     = global.require("path");
+var mkdirp   = global.require("mkdirp");
+var nw_gui   = window.require('nw.gui');
+var env      = process.env;
+
+window.addEventListener('beforeunload', function(e) {
+  console.log(e.target);
+  console.log(e.cancelable);
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+var xdg_data_dirs = (env.XDG_DATA_DIRS || "").split(":");
+var xdg_data_home = (env.XDG_DATA_HOME || env.HOME + "/.local/share")
 
 console.log("nodewebkit_main.js");
 
 var srv = new server();
+srv.setPort(undefined);
+for(var i = 0; i < xdg_data_dirs.length; i++){
+  if(xdg_data_dirs[i].length == 0) continue;
+  srv.addDataDir(path.join(xdg_data_dirs[i], "p2pweb", "data"));
+}
+var datadir = path.join(xdg_data_home, "p2pweb", "data");
+mkdirp(datadir);
+srv.setDataDir(datadir);
 module.exports = nodeapi(srv);
+
+var update_nodes_handler;
+window.document.addEventListener("template-push", function(e){
+  if(update_nodes_handler) update_nodes_handler(e.target);
+});
+  
+srv.on('listening', function(port) {
+  template.status.listening_port.push({port: port});
+  
+  update_nodes_handler = function(node){
+    var links = node.querySelectorAll("a.external, a.internal-popup");
+    for(var i = 0; i < links.length; i++){
+      var lnk = links[i];
+      lnk.addEventListener('click', function(e){
+        var href = this.getAttribute('href');
+        if(href[0] == '/')
+          href = "http://localhost:" + port + href
+        nw_gui.Shell.openExternal(href);
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+    }
+  }
+  update_nodes_handler(window.document);
+});
 
 srv.on("public-address", function(address, remote_address){
   var now = moment();

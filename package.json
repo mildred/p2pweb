@@ -6,16 +6,12 @@
     "pure": "*",
     "tmp": "*",
     "jssha": "git://github.com/Caligatio/jsSHA.git",
-    "stun": "*",
-    "stunsrv": "*",
-    "freeice": "*",
     "weld": "*",
     "tinymce": "*",
     "moment": "*",
+    "mkdirp": "*",
     "jsencrypt": "git://github.com/travist/jsencrypt.git",
     "utp": "git://github.com/mildred/utp.git",
-    "websocket": "git://github.com/mildred/WebSocket-Node.git",
-    "vs-stun": "git://github.com/mildred/vs-stun.git",
     "kademlia-dht": "git://github.com/mildred/kademlia-dht.git"
   },
   "engines": {

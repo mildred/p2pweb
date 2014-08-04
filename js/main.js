@@ -9,6 +9,7 @@ var moment   = require("./moment/min/moment-with-langs.js"),
     Router   = require('./router'),
     sha1hex  = require('./sha1hex'),
     pure     = require('./pure/pure').$p,
+    template = require('./template'),
     saveAs   = require('./filesaver/FileSaver');
 
 function updateMoment(){
@@ -28,124 +29,6 @@ module.exports = function(api){
   //
 
   window.localStorage.P2PWS = window.localStorage.P2PWS || {};
-
-  //
-  // Templates
-  //
-
-  var menu_template = pure('ul.menu').compile({
-    'li.sitelist': {
-      'site<-sites': {
-        'a.edit-link':      "site.title",
-        'a.edit-link@href': '#!/site/#{site.key}',
-        'a.view-link@href': '/obj/#{site.key}/'
-      }
-    }
-  });
-
-  var section_open_website_ul_template = pure('#section-open-website ul').compile({
-    'li': {
-      'site<-sites': {
-        'a':      "site.id",
-        'a@href': '#!/site/#{site.id}'
-      }
-    }
-  });
-
-  var section_website_template = pure('#section-website').compile({
-    '.meta .revision':         "lastSignedSection",
-    '.meta .key':              "siteKey",
-    'input[name=title]@value': "title",
-    'li.revitem': {
-      'rev<-revisions': {
-        'span.rev-num': 'rev.num',
-        'span.rev-key': 'rev.key',
-        'a.lnk-rev-view-site@href': function(a){
-          var key = a.item.signed ? this.siteKey : a.item.key;
-          return '/obj/' + key + ',' + a.item.num + '/';
-        }
-      }
-    },
-    'a.lnk-view-source@href': "/obj/#{siteKey}?content-type=text/plain",
-    'li.newpage a@href': '#!/site/#{siteId}/newpage',
-    'li.pageitem': {
-      'page<-pages': {
-        'a.edit-link':      'page.path',
-        'a.edit-link@href': '#!/site/#{siteId}/page#{page.path}',
-        'a.view-current-link@href': '/obj/#{siteKey}#{page.path}',
-        'a.view-latest-link@href':  '/obj/#{siteKey},s#{page.path}',
-        'span.section': 'page.section',
-        '@class+': function(a) {
-          return (a.item.section > a.context.lastSignedSection) ?
-                 ' unsigned' : ' signed'
-        }
-      }
-    }
-  });
-
-  var section_website_page_template = pure('#section-website-page').compile({
-    'input[name=title]@value': 'title',
-    'input[name=ctime]@value': 'ctime',
-    'input[name=mtime]@value': 'mtime',
-    'input[name=url]@value':   'url',
-    'textarea[name=body]':     'body'
-  });
-
-  //
-  // Communication with server
-  //
-
-  var blobCache = {};
-
-  function sendBlob(blob, blobid, content_type, cb){
-    if(typeof blobid == "function") {
-      cb = blobid;
-      blobid = sha1hex(blob);
-    }
-    blobCache[blobid] = blob;
-    var r = new XMLHttpRequest();
-    r.open("PUT", "/obj/" + blobid);
-    r.setRequestHeader("Content-Type", content_type);
-    r.onreadystatechange = function(){
-      if(!r.status || !r.responseText) return;
-      if(r.status >= 400) cb(r, r.responseText);
-      else cb(null, blobid);
-      r.onreadystatechange = undefined;
-    };
-    r.send(blob);
-  }
-
-  function getBlob(blobid, cache, cb) {
-    if(blobid === undefined) throw new Error("id is undefined");
-    if(typeof cache == "function") {
-      cb = cache;
-      cache = true;
-    }
-    if(cache && blobCache[blobid]) {
-      return cb(null, blobCache[blobid]);
-    }
-    var r = new XMLHttpRequest();
-    r.open("GET", "/obj/" + blobid);
-    r.onreadystatechange = function(){
-      if(r.readyState < 4) return;
-      if(r.status >= 400) {
-        cb(r);
-      } else {
-        blobCache[blobid] = r.responseText;
-        cb(null, r.responseText);
-      }
-      r.onreadystatechange = undefined;
-    };
-    r.send();
-  }
-
-  function getBlobCache(blobid, cb) {
-    return getBlob(blobid, true, cb);
-  }
-
-  function getBlobNoCache(blobid, cb) {
-    return getBlob(blobid, false, cb);
-  }
 
   //
   // Rich text editor
@@ -237,7 +120,7 @@ module.exports = function(api){
   //
 
   function updateMenu(){
-    document.querySelector("ul.menu").outerHTML = menu_template({
+    template.menu.push({
       sites: getSiteList()
     });
   };
@@ -260,7 +143,7 @@ module.exports = function(api){
       pages[path].path = path;
       pageArray.push(pages[path]);
     }
-    document.querySelector('#section-website').outerHTML = section_website_template({
+    template.website.push({
       site: site,
       title: siteTitle,
       siteKey: siteKey,
@@ -280,6 +163,7 @@ module.exports = function(api){
 
     input_title.addEventListener('input', function(){
       site.setUnsignedHeader("Title", this.value);
+      updateMenu();
     })
 
     input_title.addEventListener('change', function(){
@@ -334,7 +218,7 @@ module.exports = function(api){
     parseMetaData(existingContent);
     var newpage = !existingContent.url;
     var oldPath = existingContent.url;
-    document.querySelector('#section-website-page').outerHTML = section_website_page_template(existingContent);
+    template.website_page.push(existingContent);
     var title  = document.querySelector("#section-website-page input[name=title]");
     var link   = document.querySelector("#section-website-page input[name=url]");
     var ctime  = document.querySelector("#section-website-page input[name=ctime]");
@@ -451,7 +335,7 @@ module.exports = function(api){
 
       console.log("Save: " + doc);
 
-      sendBlob(doc, docid, "text/html; charset=utf-8", function(r, id){
+      api.sendBlob(doc, docid, "text/html; charset=utf-8", function(r, id){
         if(r) {
           console.error(r.status + ' ' + r.statusText);
           alert("Error: could not save to the server.\n" + r.status + " " + r.statusText + "\n" + id);
@@ -499,7 +383,7 @@ module.exports = function(api){
 
   function saveSite(site){
     //console.log(site);
-    sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
+    api.sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
       if(r) {
         console.error(r.status + ' ' + r.statusText);
         alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText + "\n" + id);
@@ -511,9 +395,9 @@ module.exports = function(api){
   }
 
   function getSiteWithUI(siteKey, callback){
-    getBlobNoCache(siteKey, function(err, content){
+    api.getBlobNoCache(siteKey, function(err, content){
       if(err) {
-        alert("Could not load site " + siteKey + ":\n" + err.status + " " + err.statusText);
+        alert("Could not load site " + siteKey + ":\n" + err);
         return callback();
       }
       var site = new SignedHeader(sha1hex, sign.checksign);
@@ -551,7 +435,7 @@ module.exports = function(api){
       if(err) {
         return alert("Error getting site list from server:\n" + err.status + " " + err.statusText + "\n" + err.responseText);
       }
-      document.querySelector('#section-open-website ul').outerHTML = section_open_website_ul_template({
+      template.open_website.list.push({
         sites: list
       });
     });
@@ -642,9 +526,9 @@ module.exports = function(api){
       if(!site) return r.go("#!/");
       var pagemetadata = site.getFile(path);
       updateSite(null, site);
-      getBlobCache(pagemetadata.id, function(err, content){
+      api.getBlobCache(pagemetadata.id, function(err, content){
         if(err || !content) {
-          alert("Couldn't read page id " + pagemetadata.id + "\n" + err.status + " " + err.statusText);
+          alert("Couldn't read page id " + pagemetadata.id + "\n" + err);
           return r.go("#!/");
         }
         updateSitePageEditor(null, site, {
