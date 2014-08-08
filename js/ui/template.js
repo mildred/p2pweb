@@ -1,6 +1,6 @@
 
-require('./loaded');
-var $p = require('./pure/pure').$p;
+require('./../loaded');
+var $p = require('./../pure/pure').$p;
 
 function template(selector, directives) {
   var p = $p(selector);

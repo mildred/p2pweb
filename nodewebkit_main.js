@@ -1,4 +1,4 @@
-var template = require("./js/template");   // r.js
+var template = require("./js/ui/template");   // r.js
 var server   = global.require("./server"); // nodejs
 var moment   = global.require("./js/moment/min/moment-with-locales.min.js")
 var nodeapi  = global.require("./nodewebkit_api");
