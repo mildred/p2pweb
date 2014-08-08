@@ -189,7 +189,8 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
     (request.request == "object")   ? ("/" + request.fid)  :
     "";
   
-  RPC._debugc("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
+  if(request.request != "publicURL")
+    RPC._debugc("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
   
   this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
     if(timeoutId) clearTimeout(timeoutId);
@@ -213,7 +214,7 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
       
       if(response.length == 0) {
         // The other end might be disconnected, not receiving any data
-        console.error("RPC: Did not received any response");
+        console.error("RPC: Did not received any response for " + requestURL);
         return callback(new Error("No response"));
       }
   
@@ -236,7 +237,8 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
         return callback(new Error(e));
       }
       
-      RPC._debugc("Receive Response: " + requestURL + ": " + JSON.stringify(response.ok));
+      if(request.request != "publicURL")
+        RPC._debugc("Receive Response: " + requestURL + ": " + JSON.stringify(response.ok));
       
       callback(null, response.ok);
     });

@@ -70,8 +70,9 @@ Server.prototype.start = function(){
   var self = this;
   this.utp = utp.createServer();
   this.rpc.setUTP(this.utp);
-  self.port = self.port || randomPort();
-  self.utp.listen(self.port, utpListening, tryAgain);
+  var canChangePort = !this.port;
+  this.port = this.port || randomPort();
+  this.utp.listen(this.port, utpListening, tryAgain);
   
   function utpListening(){
     self.http = http.Server(self.app);
@@ -99,7 +100,10 @@ Server.prototype.start = function(){
   }
   
   function tryAgain(){
+    if(!canChangePort) throw new Error("Cannot bind to port " + self.port);
+    var oldPort = self.port;
     self.port = randomPort();
+    console.log("Could not listen to UDP port " + oldPort + ", try with " + self.port);
     self.utp.listen(self.port, utpListening, tryAgain);
   }
   
@@ -129,6 +133,8 @@ Server.prototype._spawnDHT = function(){
         if(!bootstrapped_once) {
           bootstrapped_once = true;
           self.findIPAddress(dht, self._publishStorage.bind(self, dht));
+        } else if(self.myaddr) {
+          self._publishStorage(dht, self.myaddr);
         }
       });
     });
@@ -148,7 +154,7 @@ Server.prototype._publishStorage = function(dht, myaddr){
 
 Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) {
   // FIXME: blacklist a contact from the list after too much failures
-  // (don't remote it immediatly, if the problem is on out side we will loose
+  // (don't remove it immediatly, if the problem is on our side we will loose
   // all our seeds)
   num = num || 0;
   timeout = timeout || 5000;
@@ -179,7 +185,7 @@ Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) 
 
   var endpoint = seed.endpoint;
   this.lastContact[endpoint] = now;
-  console.log('Request my public URL to ' + endpoint);
+  //console.log('Request my public URL to ' + endpoint);
   
   var retry = setTimeout(tryAgain, timeout);
   
@@ -190,6 +196,7 @@ Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) 
       return;
     }
     self.emit("public-address", myaddr.toString(), endpoint);
+    self.myaddr = myaddr.toString();
     if(oldaddr != myaddr) callback(myaddr.toString());
     if(!retried) setTimeout(keepAlive, 20000);
     
@@ -249,4 +256,12 @@ Server.prototype.refreshSites = function(sitelist, defaultRefresh){
 
 Server.prototype.getObject = function(fid, cb){
   this.storage.getObject(this.dht, this.rpc, fid, cb)
+}
+
+Server.prototype.putObject = function(fid, headers, data, cb) {
+  this.storage.putObject(fid, headers, function(err, ondata, onend){
+    if(err) return cb(err);
+    ondata(data);
+    onend();
+  }, cb);
 }

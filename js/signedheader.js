@@ -8,6 +8,10 @@ var SignedHeader = function(hashFunc, checksign, text, validId){
   this.onchange = [];
 };
 
+SignedHeader.prototype.isEmpty = function() {
+  return this.text.length == 0;
+}
+
 SignedHeader.prototype.notifyChange = function() {
   this.onchange = this.onchange || [];
   for(var i = 0; i < this.onchange.length; i++){

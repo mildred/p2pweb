@@ -3,7 +3,7 @@ require('./blob/Blob');
 require('./localStorage');
 require('./loaded');
 
-var moment   = require("./moment/min/moment-with-langs.js"),
+var moment   = require("./moment/min/moment-with-locales.js"),
     keytools = require('./keytools'),
     sign     = require('./sign'),
     Router   = require('./router'),
@@ -114,6 +114,14 @@ module.exports = function(api){
     r.send();
 
   }
+  
+  function updateSiteInList(siteKey, site) {
+    var siteList = getSiteList();
+    siteList[siteKey] = siteList[siteKey] || {};
+    siteList[siteKey].key = siteKey;
+    siteList[siteKey].title = site.getLastHeader("Title");
+    saveSiteList(siteList);
+  }
 
   //
   // Update UI
@@ -153,24 +161,41 @@ module.exports = function(api){
       lastSignedSection: site.getLastSignedSection()
     });
 
-    var btn_open_pkey = document.querySelector('#section-website button.btn-open-pkey');
     var btn_save_pkey = document.querySelector('#section-website button.btn-save-pkey');
     var btn_sign_rev  = document.querySelector('#section-website button.btn-sign-revision');
     var input_title   = document.querySelector('#section-website input[name=title]');
-    btn_open_pkey.disabled = privateKey;
     btn_save_pkey.disabled = !privateKey;
-    btn_sign_rev.disabled  = !privateKey;
 
     input_title.addEventListener('input', function(){
       site.setUnsignedHeader("Title", this.value);
+      updateSiteInList(siteKey, site)
       updateMenu();
     })
 
     input_title.addEventListener('change', function(){
       saveSite(site);
+      updateSite(sitenum, site);
     })
 
-    keytools.install_open_key_handler(btn_open_pkey, function(err, privateKey_, crypt){
+    var opener = keytools.install_file_opener(btn_sign_rev);
+
+    btn_save_pkey.addEventListener('click', function(){
+      var blob = new Blob([privateKey], {type: "application/x-pem-file"});
+      saveAs(blob, "private.pem");
+    });
+
+    btn_sign_rev.addEventListener('click', function(){
+      if(!privateKey) {
+        opener(keyOpen);
+      }
+      if(privateKey) {
+        site.addSignature(sign.sign(privateKey));
+        saveSite(site);
+        updateSite(sitenum, site);
+      }
+    });
+    
+    function keyOpen(err, privateKey_, crypt){
       if(err) {
         return alert("Could not load key file: " + err);
       }
@@ -186,23 +211,21 @@ module.exports = function(api){
       }
       privateKeyStore[siteKey] = privateKey = privateKey_;
       btn_save_pkey.disabled = false;
-      btn_sign_rev.disabled  = false;
-    });
-
-    btn_save_pkey.addEventListener('click', function(){
-      var blob = new Blob([privateKey], {type: "application/x-pem-file"});
-      saveAs(blob, "private.pem");
-    });
-
-    btn_sign_rev.addEventListener('click', function(){
-      site.addSignature(sign.sign(privateKey));
-      saveSite(site);
-      window.router.go("#!/site/" + (sitenum || siteKey));
-    });
+    }
+  }
+  
+  function parseHTML(htmlCode) {
+    var htmlCode = htmlCode || "<!DOCTYPE html5><html><head></head><body></body></html>";
+    var doc = (new DOMParser()).parseFromString(htmlCode, "text/html");
+    if(!doc) {
+      doc = document.implementation.createHTMLDocument("");
+  		doc.documentElement.innerHTML = htmlCode;
+    }
+    return doc;
   }
 
   function parseMetaData(existingContent){
-    var doc = (new DOMParser()).parseFromString(existingContent.body, "text/html");
+    var doc = parseHTML(existingContent.body)
     var dateCreated = doc.head.querySelector("meta[name='dcterms.created']");
     var dateUpdated = doc.head.querySelector("meta[name='dcterms.date']");
     var title       = doc.head.querySelector("title");
@@ -234,12 +257,11 @@ module.exports = function(api){
     initEditor("#section-website-page textarea.rich", {
       save: saveDocument,
       init: function(editor){
-        var parser = new DOMParser();
         title.addEventListener('input', saveTitle);
 
         function getEditorDOM(){
           var html = editor.getContent();
-          return parser.parseFromString(html, "text/html");
+          return parseHTML(html);
         }
 
         function setEditorDOM(dom, onlyHEAD){
@@ -283,7 +305,7 @@ module.exports = function(api){
     });
 
     function updateMarkupBeforeSave(html, path){
-      var doc = (new DOMParser()).parseFromString(html, "text/html");
+      var doc = parseHTML(html);
       var now = new Date();
 
       // http://wiki.whatwg.org/wiki/MetaExtensions
@@ -335,10 +357,10 @@ module.exports = function(api){
 
       console.log("Save: " + doc);
 
-      api.sendBlob(doc, docid, "text/html; charset=utf-8", function(r, id){
-        if(r) {
-          console.error(r.status + ' ' + r.statusText);
-          alert("Error: could not save to the server.\n" + r.status + " " + r.statusText + "\n" + id);
+      api.sendBlob(doc, docid, "text/html; charset=utf-8", function(e, id){
+        if(e) {
+          console.error(e.statusCode + " " + e.statusMessage);
+          alert("Error: could not save to the server.\n" + e.statusCode + " " + e.statusMessage + "\n" + e.message);
         } else {
           //console.log("PUT /obj/" + id + " ok");
           window.router.go("#!/site/" + (sitenum || siteKey) + "/page" + path);
@@ -383,11 +405,11 @@ module.exports = function(api){
 
   function saveSite(site){
     //console.log(site);
-    api.sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(r, id){
-      if(r) {
-        console.error(r.status + ' ' + r.statusText);
-        alert("Error: could not save site to the server.\n" + r.status + " " + r.statusText + "\n" + id);
-        // FIXME: we shouldn't reload because we are loosing changes here
+    api.sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(e, id){
+      if(e) {
+        console.error(e.statusCode + " " + e.statusMessage);
+        alert("Error: could not save site to the server.\n" + e.statusCode + " " + e.statusMessage + "\n" + e.message);
+        // FIXME: we shouldn't reload in case of error because we are loosing changes here
       } else {
         //console.log("PUT /obj/" + id + " ok");
       }
@@ -400,14 +422,14 @@ module.exports = function(api){
         alert("Could not load site " + siteKey + ":\n" + err);
         return callback();
       }
+      if(!content) {
+        alert("Could not load site " + siteKey + ":\nit has disappeared");
+        return callback();
+      }
       var site = new SignedHeader(sha1hex, sign.checksign);
       site.parseText(content, siteKey);
       
-      var siteList = getSiteList();
-      siteList[siteKey] = siteList[siteKey] || {};
-      siteList[siteKey].key = siteKey;
-      siteList[siteKey].title = site.getLastHeader("Title");
-      saveSiteList(siteList);
+      updateSiteInList(siteKey, site);
       updateMenu();
 
       callback(site);
@@ -503,8 +525,9 @@ module.exports = function(api){
     var siteKey = req[1].toLowerCase();
     getSiteWithUI(siteKey, function(site){
       if(!site) return r.go("#!/");
-      updateSite(null, site);
       document.querySelectorAll("#section-website-page").hide();
+      document.querySelectorAll("#section-website").show();
+      updateSite(null, site);
     });
   });
 
@@ -513,6 +536,7 @@ module.exports = function(api){
     var siteKey = req[1].toLowerCase();
     getSiteWithUI(siteKey, function(site){
       if(!site) return r.go("#!/");
+      document.querySelectorAll("#section-website").show();
       updateSite(null, site);
       updateSitePageEditor(null, site);
     });
@@ -525,6 +549,8 @@ module.exports = function(api){
     getSiteWithUI(siteKey, function(site){
       if(!site) return r.go("#!/");
       var pagemetadata = site.getFile(path);
+      document.querySelectorAll("#section-website").show();
+      document.querySelectorAll("#section-website-page").show();
       updateSite(null, site);
       api.getBlobCache(pagemetadata.id, function(err, content){
         if(err || !content) {

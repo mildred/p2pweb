@@ -18,7 +18,12 @@ api.sendBlob = function(blob, blobid, content_type, cb){
   r.setRequestHeader("Content-Type", content_type);
   r.onreadystatechange = function(){
     if(!r.status || !r.responseText) return;
-    if(r.status >= 400) cb(r, r.responseText);
+    if(r.status >= 400) {
+      var e = new Error(r.responseText);
+      e.statusCode = r.status;
+      e.statusMessage = r.statusText;
+      cb(e);
+    }
     else cb(null, blobid);
     r.onreadystatechange = undefined;
   };

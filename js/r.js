@@ -403,7 +403,7 @@ function extract_header(s) {
 function add_code(js, content_type){
   var e = document.createElement('script');
   e.type = content_type || 'text/javascript';
-  e.src  = 'data:' + e.type + ','+escape(js);
+  e.src  = 'data:' + e.type + ','+encodeURIComponent(js);
   document.head.appendChild(e);
 }
 

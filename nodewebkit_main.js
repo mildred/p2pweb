@@ -1,6 +1,6 @@
 var template = require("./js/template");   // r.js
 var server   = global.require("./server"); // nodejs
-var moment   = global.require("./js/moment/min/moment-with-langs.min.js")
+var moment   = global.require("./js/moment/min/moment-with-locales.min.js")
 var nodeapi  = global.require("./nodewebkit_api");
 var path     = global.require("path");
 var mkdirp   = global.require("mkdirp");
@@ -74,13 +74,19 @@ new_seed_button.addEventListener('click', function(){
 
 srv.start();
 
-function updateSeeds() {
+function updateStatus() {
   if(!srv.dht) return;
+
   var seeds = srv.dht.getSeeds();
   template.status.seeds.push({
     seeds: seeds
   });
+  
+  var datalist = srv.storage.getCacheFileList();
+  template.status.data.push({
+    data: datalist
+  });
 };
 
-updateSeeds();
-setInterval(updateSeeds, 1000);
+updateStatus();
+setInterval(updateStatus, 1000);

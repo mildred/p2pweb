@@ -28,7 +28,7 @@
       <li><a class="showhide" href="#!/site/new">New Website</a></li>
       <li><a class="showhide" href="#!/site/open">Open Existing Website</a>
         <ul>
-          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> <a href="" class="view-link external">(view)</a></li>
+          <li class="sitelist"><a href="#!/site/1" class="edit-link">Site #1</a> (<a href="" class="view-link external">view</a>, <a href="javascript:alert('not implemented')">forget</a>)</a></li>
         </ul>
       </li>
     </ul>
@@ -55,29 +55,36 @@
         Add seed: <input type="text" placeholder="seed url"/><input type="button" value="Ok"/>
         <br/><small><em>Example: <tt>utp+p2pws://127.0.0.1:24500</tt></em></small>
       </dd>
+      <dt>Data:</dt>
+      <div class="data-list">
+        <dd class="data">
+          <span class="data-id"></span>
+        </dd>
+      </div>
     </dl>
   </section>
   <section class="showhide" id="section-website">
-    <h1><input type="text" name="title" placeholder="Site Title"/></h1>
-    <aside class="meta">
-      At revision <span class="revision"></span>
-      <br/>Primary Key: <span class="key"></span>
-      <ul>
-        <li class="revitem">Revision <span class="rev-num"></span>: <span class="rev-key"></span> <a href="" class="lnk-rev-view-site external">(view site)</a></li>
+    <div class="siteinfo">
+      <h1><input type="text" name="title" placeholder="Site Title"/></h1>
+      <aside class="meta">
+        At revision <span class="revision"></span>
+        <br/>Primary Key: <span class="key"></span>
+        <ul>
+          <li class="revitem">Revision <span class="rev-num"></span>: <span class="rev-key"></span> <a href="" class="lnk-rev-view-site external">(view site)</a></li>
+        </ul>
+      </aside>
+      <p>
+        <a href="" class="lnk-view-source internal-popup">View source code</a>
+      </p>
+      <p>
+        <button class="btn-sign-revision">Sign new revision</button>
+        <button class="btn-save-pkey">Save Private Key</button>
+      </p>
+      <ul class="pagelist">
+        <li class="newpage"><a href="#!/site/99/newpage">New Page</a></li>
+        <li class="pageitem"><a href="#!/site/99/page/toto.html" class="edit-link">/toto.html</a> (Revision <span class="section">1</span>, <a href="" class="view-current-link external">view current</a>, <a href="" class="view-latest-link external">view latest</a>)</li>
       </ul>
-    </aside>
-    <p>
-      <a href="" class="lnk-view-source internal-popup">View source code</a>
-    </p>
-    <p>
-      <button class="btn-open-pkey">Open Private Key</button>
-      <button class="btn-save-pkey">Save Private Key</button>
-      <button class="btn-sign-revision">Sign new revision</button>
-    </p>
-    <ul class="pagelist">
-      <li class="newpage"><a href="#!/site/99/newpage">New Page</a></li>
-      <li class="pageitem"><a href="#!/site/99/page/toto.html" class="edit-link">/toto.html</a> (Revision <span class="section">1</span>, <a href="" class="view-current-link external">view current</a>, <a href="" class="view-latest-link">view latest</a>)</li>
-    </ul>
+    </div>
     <section class="showhide" id="section-website-page">
       <h2><input type="text" name="title" placeholder="Page Title"/></h2>
       <p>

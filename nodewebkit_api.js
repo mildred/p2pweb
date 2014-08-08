@@ -14,7 +14,8 @@ module.exports = function(srv){
   };
   
   api.sendBlob = function(blob, blobid, content_type, cb){
-    throw new Error("Not implemented");
+    var headers = {'content-type': content_type}
+    srv.putObject(blobid, headers, blob, cb)
   };
 
   api.getBlob = function(blobid, cache, cb) {

@@ -37,6 +37,14 @@ exports.status.seeds = template("#section-status .seeds", {
   }
 });
 
+exports.status.data = template("#section-status .data-list", {
+  ".data": {
+    "d<-data": {
+      ".data-id": "d.id"
+    }
+  }
+});
+
 exports.menu = template('ul.menu', {
   'li.sitelist': {
     'site<-sites': {
@@ -56,7 +64,7 @@ exports.open_website.list = template('#section-open-website ul', {
   }
 });
 
-exports.website = template('#section-website', {
+exports.website = template('#section-website .siteinfo', {
   '.meta .revision':         "lastSignedSection",
   '.meta .key':              "siteKey",
   'input[name=title]@value': "title",

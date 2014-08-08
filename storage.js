@@ -26,6 +26,18 @@ Storage.prototype.addDataDir = function(dir){
   this.addfile(dir);
 };
 
+Storage.prototype.getCacheSiteList = function(){
+  return Object.keys(this.sitelist).map(function(id){
+    return this.sitelist[id];
+  }, this);
+};
+
+Storage.prototype.getCacheFileList = function(){
+  return Object.keys(this.filelist).map(function(id){
+    return this.filelist[id];
+  }, this);
+};
+
 Storage.prototype.register_file = function(fid, path, metadata, h){
   // FIXME: refactoring parameters
   //console.log("Register " + fid + " " + path);
@@ -73,7 +85,7 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
     console.log("Register " + id + " #" + i + (signed ? "" : "?") + " " + path);
     if(id == fid) return;
     self.filelist[id] = {
-      id: fid,
+      id: id,
       metadata: metadata,
       path: path,
       signed_ids: [],
@@ -139,9 +151,7 @@ Storage.prototype.putObjectHTTP = function(fid, req, callback){
     if(err) return callback(err.statusCode, err.statusMessage, err);
     
     req.on('data', ondata);
-    req.on('end',  function(){
-      onend(end);
-    });
+    req.on('end',  onend);
   }, end);
   
   function end(e){
@@ -150,7 +160,7 @@ Storage.prototype.putObjectHTTP = function(fid, req, callback){
   }
 };
 
-Storage.prototype.putObject = function(fid, headers, callback, cberror) {
+Storage.prototype.putObject = function(fid, headers, callback, cbend) {
   var self = this;
   var filename = path.join(this.datadir, fid);
   var filename_meta = filename + ".meta";
@@ -171,7 +181,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cberror) {
     fh.on('error', function(e){
       e.statusCode = 500;
       e.statusMessage = "Internal Error";
-      if(cberror) cberror(500, "Internal Error", e);
+      if(cbend) cbend(e);
       stop = true;
     })
 
@@ -181,7 +191,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cberror) {
       if(is_p2pws) data.push(d);
     }
     
-    function onend(cb) {
+    function onend() {
       fh.end();
       if(stop) {
         fs.unlink(filename_temp, logerror);
@@ -201,11 +211,11 @@ Storage.prototype.putObject = function(fid, headers, callback, cberror) {
 
       if(real_fid != fid) {
         fs.unlink(filename_temp, logerror);
-        var e = new Error("400 Bad Request: Incorrect Identifier, expected " + real_fid + " instad of " + fid);
+        var e = new Error("Incorrect Identifier, expected " + real_fid + " instad of " + fid);
         e.statusCode = 400;
         e.statusMessage = "Bad Request";
         console.error(e);
-        return cb(e);
+        return cbend(e);
       }
       
       if(is_p2pws){
@@ -224,7 +234,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cberror) {
           e.httpStatus = 400;
           e.statusMessage = "Bad Request";
           console.error(e);
-          return cb(e);
+          return cbend(e);
         }
       }
       
@@ -234,13 +244,13 @@ Storage.prototype.putObject = function(fid, headers, callback, cberror) {
           e.httpStatus = 500;
           e.statusMessage = "Internal Error";
           console.error(e);
-          return cb(e);
+          return cbend(e);
         }
         var metadata = {
           headers: { "content-type": headers["content-type"] }
         };
         self.register_file(fid, filename, metadata, h);
-        cb(null, fid);
+        cbend(null, fid);
         fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
       });
     }
@@ -337,7 +347,7 @@ Storage.prototype.refreshSite = function(rpc, site) {
       self.putObject(fid, reply.metadata.headers, function(err, ondata, onend){
         if(err) return storeEnd(err);
         ondata(reply.data);
-        onend(storeEnd);
+        onend();
       }, storeEnd);
       
       function storeEnd(e){
@@ -348,7 +358,7 @@ Storage.prototype.refreshSite = function(rpc, site) {
 }
 
 function isp2pws(headers){
-  return /^application\/vnd.p2pws(;.*)$/.test(headers["content-type"]);
+  return /^application\/vnd.p2pws(;.*)?$/.test(headers["content-type"]);
 }
 
 function logerror(e) {
