@@ -9,6 +9,16 @@ The protocol itself doesn't handle security. Such things are better left off to 
 
 This is designed as a replacement for websites that contain mostly static content such as blogs. Complex web applications are not a target for P2PWeb. Some applications may however be implemented in pure JavaScript.
 
+Advantages over the current Web
+===============================
+
+The design allows new applications:
+
+* backlinks are possible using the DHT. You can then know which sites links to you (if they advertise it).
+* comments in blog posts can be implemented using backlinks. Comments will be hosted by the author of the comment on his personal site and aggregated by a simple javascript function of the blog post page. Moderation is less crucial (but still possible) as the comment author takes full legal responsibility of his comment (this is the same thing with a search engine. The search engine is not responsible for the page summary it shows).
+* new forms of messaging could be imagined.
+* anyone could publish easily to the web
+
 Design
 ======
 
@@ -160,6 +170,11 @@ backlinks:
     content:       ['reference', 'ABC123']
 
 This can be used to replace a builtin-board.
+
+Public websites or wikis
+------------------------
+
+The private key is available on the site itself. Anyone can modify it. TODO: manage concurrent editing.
 
 Messaging
 ---------
