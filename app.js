@@ -3,7 +3,6 @@ var kad     = require('kademlia-dht');
 var http    = require('http');
 var random  = require('./random');
 var express = require('express');
-var sha1sum = require('./sha1sum');
 var verifysign = require('./verifysign');
 var SignedHeader = require('./js/signedheader');
 
@@ -182,12 +181,6 @@ module.exports = function(server, kadrpc, storage){
     req.end();
   }
 
-  // getFile: Get file from DHT
-  //
-  var getFile = function(fid, cb){
-    return storage.getObject(server.dht, kadrpc, fid, cb);
-  };
-
   var redirectObjectNotFound = function(fid, path, res, opts) {
     opts = opts || {};
     res.setHeader("X-File-ID", fid)
@@ -243,7 +236,7 @@ module.exports = function(server, kadrpc, storage){
       return;
     }
     
-    getFile(fid, function(err, data, metadata){
+    storage.getObject(server.dht, kadrpc, fid, function(err, data, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);
@@ -310,21 +303,19 @@ module.exports = function(server, kadrpc, storage){
     if(!path)
       return serveFile(fid, res, req.query, {query_string: query_string});
     
-    getFile(fid, function(err, data, metadata){
+    storage.getObject(server.dht, kadrpc, fid, function(err, h, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);
         res.end("Error:\n" + err);
         return;
       }
-      if(!data) {
+      if(!h) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(404, "Not Found");
         res.end("File Not Found");
         return;
       }
-      var h = new SignedHeader(sha1sum, verifysign);
-      h.parseText(data, fid);
       ver = parseInt(ver);
       if(!unsigned) {
         h.truncate();

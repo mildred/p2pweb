@@ -257,7 +257,7 @@ RPC.prototype.getPublicURL = function(endpoint, timeout, cb) {
   return this.request(endpoint, {request: "publicURL"}, timeout, cb);
 };
 
-RPC.prototype.getObject = function(endpoint, fid, timeout, cbdata, cbend) {
+RPC.prototype.getObject = function(endpoint, fid, timeout, cbdata, cbend) { // FIXME: find something better suited for large files
   return this.request(endpoint, {request: "object", fid: fid}, timeout, cbdata, cbend);
 };
 

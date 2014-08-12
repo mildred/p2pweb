@@ -7,12 +7,13 @@ require('./ui/moments');
 var keytools             = require('./keytools'),
     sign                 = require('./sign'),
     Router               = require('./router'),
-    sha1hex              = require('./sha1hex'),
-    template             = require('./ui/template'),
+    hash                 = require('./hash'),
+    MetaHeaders          = require('./metaheaders');
+var template             = require('./ui/template'),
     updateMenu           = require('./ui/menu'),
     updateSite           = require('./ui/site'),
-    updateSitePageEditor = require('./ui/sitepage'),
-    localSiteList        = require('./model/localsitelist');
+    updateSitePageEditor = require('./ui/sitepage');
+var localSiteList        = require('./model/localsitelist');
 
 module.exports = function(api){
 
@@ -28,7 +29,7 @@ module.exports = function(api){
 
   function saveSite(site){
     //console.log(site);
-    api.sendBlob(site.text, site.getFirstId(), "application/vnd.p2pws", function(e, id){
+    api.sendBlob(site.text, site.getFirstId(), site.mh, function(e, id){
       if(e) {
         console.error(e.statusCode + " " + e.statusMessage);
         alert("Error: could not save site to the server.\n" + e.statusCode + " " + e.statusMessage + "\n" + e.message);
@@ -39,10 +40,10 @@ module.exports = function(api){
     });
   }
   
-  function saveBlob(docid, doc, content_type, callback){
+  function saveBlob(docid, doc, mh, callback){
     console.log("Save: " + doc);
 
-    api.sendBlob(doc, docid, content_type, function(e, id){
+    api.sendBlob(doc, docid, mh, function(e, id){
       if(e) {
         console.error(e.statusCode + " " + e.statusMessage);
         alert("Error: could not save to the server.\n" + e.statusCode + " " + e.statusMessage + "\n" + e.message);
@@ -52,7 +53,7 @@ module.exports = function(api){
   }
 
   function getSiteWithUI(siteKey, callback){
-    api.getBlobNoCache(siteKey, function(err, content){
+    api.getBlobNoCache(siteKey, function(err, content, mh){
       if(err) {
         alert("Could not load site " + siteKey + ":\n" + err);
         return callback();
@@ -61,7 +62,7 @@ module.exports = function(api){
         alert("Could not load site " + siteKey + ":\nit has disappeared");
         return callback();
       }
-      var site = new SignedHeader(sha1hex, sign.checksign);
+      var site = new SignedHeader(mh,hash.make(mh), sign.checksign);
       site.parseText(content, siteKey);
       
       localSiteList.updateSite(siteKey, site);
@@ -132,8 +133,9 @@ module.exports = function(api){
     var id;
 
     function KeyAvailable(crypt_, generated){
+      var mh = MetaHeaders.fromContentType("application/vnd.p2pws");
       crypt = crypt_;
-      site = new SignedHeader(sha1hex, sign.checksign);
+      site = new SignedHeader(mh, hash.make(mh), sign.checksign);
       site.addHeader("Format", "P2P Website");
       site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       site.addSignature(sign.sign(crypt));
@@ -166,8 +168,8 @@ module.exports = function(api){
     });
   });
   
-  function savePage(siteKey, path, docid, doc){
-    saveBlob(docid, doc, "text/html; charset=utf-8", function(e, id){
+  function savePage(siteKey, path, docid, doc, mh){
+    saveBlob(docid, doc, mh, function(e, id){
       if(!e) r.go("#!/site/" + siteKey + "/page" + path);
     });
   }

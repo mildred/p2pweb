@@ -1,4 +1,5 @@
-var sha1hex = require('./sha1hex');
+var MetaHeaders = require('./metaheaders');
+
 var api = {};
 
 api.removeSeed = function(id, cb) {
@@ -7,15 +8,11 @@ api.removeSeed = function(id, cb) {
 
 var blobCache = {};
 
-api.sendBlob = function(blob, blobid, content_type, cb){
-  if(typeof blobid == "function") {
-    cb = blobid;
-    blobid = sha1hex(blob);
-  }
-  blobCache[blobid] = blob;
+api.sendBlob = function(blob, blobid, mh, cb){
+  blobCache[blobid] = {data: blob, mh: mh};
   var r = new XMLHttpRequest();
   r.open("PUT", "/obj/" + blobid);
-  r.setRequestHeader("Content-Type", content_type);
+  mh.setRequestHeaders(r);
   r.onreadystatechange = function(){
     if(!r.status || !r.responseText) return;
     if(r.status >= 400) {
@@ -30,14 +27,14 @@ api.sendBlob = function(blob, blobid, content_type, cb){
   r.send(blob);
 };
 
-api.getBlob = function(blobid, cache, cb) {
+api.getBlob = function(blobid, cache, cb) { // cb(err, data:string, metaheaders)
   if(blobid === undefined) throw new Error("id is undefined");
   if(typeof cache == "function") {
     cb = cache;
     cache = true;
   }
   if(cache && blobCache[blobid]) {
-    return cb(null, blobCache[blobid]);
+    return cb(null, blobCache[blobid].data, blobCache[blobid].mh);
   }
   var r = new XMLHttpRequest();
   r.open("GET", "/obj/" + blobid);
@@ -46,8 +43,9 @@ api.getBlob = function(blobid, cache, cb) {
     if(r.status >= 400) {
       cb(new Error(r.status + " " + r.statusText + ":\n" + r.responseText));
     } else {
-      blobCache[blobid] = r.responseText;
-      cb(null, r.responseText);
+      var mh = new MetaHeaders(r.getResponseHeader.bind(r));
+      blobCache[blobid] = {mh: mh, data: r.responseText};
+      cb(null, r.responseText, mh);
     }
     r.onreadystatechange = undefined;
   };

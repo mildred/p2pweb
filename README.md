@@ -13,6 +13,22 @@ TODO
   (especially with node-webkit, either open in a new window or with the
   browser)
 
+Roadmap
+=======
+
+- make file headers (such as content-type) part of the file itself and hashed
+  with the file. Define a format for it. implementation: look at all the
+  occurences of sha1hex on the client side, don't put the headers and the
+  content in a single string for hashing, rather call the hashng function twice.
+- add metadata for each file in the data directory to tell why it is there:
+    - part of a website (tell which)
+    - viewed recently (when)
+    - it is a website the user created / decided to keep
+- implement website auto download for websites we created / want to keep. Try to
+  have this working in almost real time. Implement notification system.
+- put p2pweb in a docker container and put an instance on the web
+- create a website, update it locally, and check it is uploaded to the server
+
 Backlinks
 ---------
 

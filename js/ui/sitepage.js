@@ -1,10 +1,11 @@
 
-var sha1hex    = require('./../sha1hex'),
-    parseHTML  = require('./../parsehtml'),
-    template   = require('./template'),
-    ui_editor  = require('./editor'),
-    updateMenu = require('./menu'),
-    updateSite = require('./site');
+var hash        = require('./../hash'),
+    parseHTML   = require('./../parsehtml'),
+    MetaHeaders = require('./../metaheaders'),
+    template    = require('./template'),
+    ui_editor   = require('./editor'),
+    updateMenu  = require('./menu'),
+    updateSite  = require('./site');
 
 function updateSitePageEditor(localSiteList, saveSite, savePage, sitenum, site, existingContent){
   var siteKey = site.getFirstId();
@@ -116,17 +117,19 @@ function updateSitePageEditor(localSiteList, saveSite, savePage, sitenum, site, 
   function saveDocument(editor){
     var path = link.value;
     var doc = updateMarkupBeforeSave(editor.getContent(), path);
-    var docid = sha1hex(doc);
+    var mh = MetaHeaders.fromContentType('text/html; charset=utf-8');
+    var hashFunc = hash.make(mh);
+    var docid = hashFunc(doc);
     if(oldPath && oldPath != path) {
       site.rmFile(oldPath);
     }
-    site.addFile(path, docid, {'content-type': 'text/html; charset=utf-8'});
+    site.addFile(path, docid, mh.toHeaders());
 
     saveSite(site);
     updateMenu(localSiteList.getList());
     updateSite(localSiteList, saveSite, sitenum, site);
 
-    savePage(sitenum || siteKey, path, docid, doc);
+    savePage(sitenum || siteKey, path, docid, doc, mh);
   }
 
   function updateLinkURL(){

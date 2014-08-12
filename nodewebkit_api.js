@@ -1,4 +1,5 @@
 var kad = require('kademlia-dht');
+var MetaHeaders = require('./js/metaheaders');
 
 module.exports = function(srv){
 
@@ -13,13 +14,16 @@ module.exports = function(srv){
     }
   };
   
-  api.sendBlob = function(blob, blobid, content_type, cb){
-    var headers = {'content-type': content_type}
+  api.sendBlob = function(blob, blobid, mh, cb){
+    var headers = mh.toHeaders(); // FIXME
     srv.putObject(blobid, headers, blob, cb)
   };
 
-  api.getBlob = function(blobid, cache, cb) {
-    srv.getObject(blobid, cb);
+  api.getBlob = function(blobid, cache, cb) { // cb(err, data:string, metaheaders)
+    srv.getObject(blobid, function(err, data, metadata){
+      var mh = new MetaHeaders(metadata.headers);
+      cb(err, data, mh);
+    });
   };
 
   api.getBlobCache = function (blobid, cb) {

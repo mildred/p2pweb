@@ -1,12 +1,13 @@
 var fs      = require('fs');
 var tmp     = require('tmp');
 var kad     = require('kademlia-dht');
+var hash    = require('./js/hash');
 var path    = require('path');
 var events  = require('events');
-var crypto  = require('crypto');
 var random  = require('./random');
-var sha1sum = require('./sha1sum');
+var readAll = require('./readall');
 var verifysign = require('./verifysign');
+var MetaHeaders = require('./js/metaheaders');
 var SignedHeader = require('./js/signedheader');
 
 function Storage() {
@@ -19,11 +20,11 @@ Storage.prototype = new events.EventEmitter;
 
 Storage.prototype.setDataDir = function(dir){
   this.datadir = dir;
-  this.addfile(dir);
+  this._addfile(dir);
 };
 
 Storage.prototype.addDataDir = function(dir){
-  this.addfile(dir);
+  this._addfile(dir);
 };
 
 Storage.prototype.getCacheSiteList = function(){
@@ -96,7 +97,7 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
   }
 }
 
-Storage.prototype.addfile = function(file) {
+Storage.prototype._addfile = function(file) {
   var self = this;
   fs.stat(file, function(err, st){
     if(err) {
@@ -107,7 +108,7 @@ Storage.prototype.addfile = function(file) {
           console.log("Error " + file + ": " + err);
         } else {
           for(var i = 0; i < files.length; i++) {
-            self.addfile(path.join(file, files[i]))
+            self._addfile(path.join(file, files[i]))
           }
         }
       });
@@ -127,10 +128,12 @@ Storage.prototype.addfile = function(file) {
           }
           metadata.headers = metadata.headers || {};
 
-          var key = sha1sum(data);
+          var mh = new MetaHeaders(metadata.headers);
+          var hashFunc = hash.make(mh);
+          var key = hashFunc(data);
           
           if(isp2pws(metadata.headers)){
-            var h = new SignedHeader(sha1sum, verifysign);
+            var h = new SignedHeader(mh, hashFunc, verifysign);
             h.parseText(data.toString());
             real_fid = h.getFirstId() || key;
             all_signed_ids = h.getSectionsIds(true);
@@ -161,13 +164,14 @@ Storage.prototype.putObjectHTTP = function(fid, req, callback){
 };
 
 Storage.prototype.putObject = function(fid, headers, callback, cbend) {
+  var mh = new MetaHeaders(headers);
   var self = this;
   var filename = path.join(this.datadir, fid);
   var filename_meta = filename + ".meta";
   var is_p2pws = isp2pws(headers);
   tmp.tmpName({dir: this.datadir}, function(err, filename_temp){
     var fh = fs.createWriteStream(filename_temp);
-    var sum = crypto.createHash('sha1');
+    var sum = hash.makeStream(mh);
     var data = [];
     var stop = false;
     
@@ -198,12 +202,12 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
         return;
       }
 
-      var digest = sum.digest('hex');
+      var digest = sum.gethex();
       var real_fid = digest;
       var all_signed_ids = [real_fid];
       var h;
       if(is_p2pws){
-        h = new SignedHeader(sha1sum, verifysign);
+        h = new SignedHeader(mh, hash.make(mh), verifysign);
         h.parseText(Buffer.concat(data).toString());
         real_fid = h.getFirstId();
         all_signed_ids = h.getSectionsIds(true);
@@ -257,6 +261,20 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
   });  
 }
 
+// cb(err, h, metadata)
+//
+Storage.prototype.getSite = function(dht, rpc, fid, cb) {
+  this.getObject(dht, rpc, fid, function(err, data, metadata){
+    var mh = new MetaHeaders(metadata.headers);
+    var h;
+    if(data) {
+      h = new SignedHeader(mh, hash.make(mh), verifysign);
+      h.parseText(data, fid);
+    }
+    return cb(err, h, metadata);
+  });
+}
+
 // getObject: fetch an object, either from the cache or from the DHT.
 // FIXME: don't transmit full data but transmit in chunks
 // FIXME: store in cache
@@ -266,12 +284,18 @@ Storage.prototype.getObject = function(dht, rpc, fid, cb) {
   var f = this.filelist[fid];
   if(f) {
     console.log("getObject(" + fid + "): file available locally");
-    fs.readFile(f.path, function (err, data) {
+    fs.open(f.path, 'r', function (err, fh) {
       if(err) {
         err.httpStatus = 500;
         return cb(err);
       }
-      cb(null, data.toString(), f.metadata);
+      readAll(fh, function(err, buf){
+        if(err) {
+          err.httpStatus = 500;
+          return cb(err);
+        }
+        cb(null, buf.toString(), f.metadata);
+      });
     });
     return;
   }
@@ -304,7 +328,7 @@ Storage.prototype.getObject = function(dht, rpc, fid, cb) {
     var destination = random.value(availableDestinations);
     console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
 
-    rpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout
+    rpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout FIXME: data streaming
       if(err) {
         console.log("getObject(" + fid + "): " + err.toString());
         err.httpStatus = 502;

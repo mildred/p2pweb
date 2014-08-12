@@ -1,4 +1,5 @@
-var SignedHeader = function(hashFunc, checksign, text, validId){
+var SignedHeader = function(mh, hashFunc, checksign, text, validId){
+  this.mh = mh;
   this._hashFunc  = hashFunc;
   this._checksign = checksign;
   this._pubkey    = null;
@@ -96,7 +97,7 @@ SignedHeader.prototype.parseText = function (text, validId) {
   // Mark valid headers
   //
   
-  this.markValid(validId);
+  this._markValid(validId);
 
   //
   // The end
@@ -105,7 +106,7 @@ SignedHeader.prototype.parseText = function (text, validId) {
   this.notifyChange();
 }
 
-SignedHeader.prototype.markValid = function (validId) {
+SignedHeader.prototype._markValid = function (validId) {
   var i;
   if(this._hashFunc(this.text) == validId || validId === true) {
     i = this.headers.length - 1;
