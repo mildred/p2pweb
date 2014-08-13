@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 
-var fs         = require('fs');
-var kad        = require('kademlia-dht');
-var app        = require('./app');
-var rpc        = require('./rpc');
-var utp        = require('utp');
-var http       = require('http');
-var rand       = require('./random');
-var events     = require('events');
-var stream     = require('stream');
-var storage    = require('./storage');
+var fs           = require('fs');
+var kad          = require('kademlia-dht');
+var app          = require('./app');
+var rpc          = require('./rpc');
+var utp          = require('utp');
+var http         = require('http');
+var hash         = require('./js/hash');
+var rand         = require('./random');
+var events       = require('events');
+var stream       = require('stream');
+var readAll      = require('./readall');
+var storage      = require('./storage');
+var verifysign   = require('./verifysign');
+var MetaHeaders  = require('./js/metaheaders');
+var SignedHeader = require('./js/signedheader');
 
 
 module.exports = Server;
 function Server(){
+  var self = this;
   this.seeds        = [];
   this.lastContact  = {};
   this.pendingseeds = 0;
@@ -23,9 +29,74 @@ function Server(){
   this.rpc = new rpc(this._rpcGetObject.bind(this));
   this.storage = new storage();
   this.app = app(this, this.rpc, this.storage);
+  this.bootstrapped_once = false;
 }
 
 Server.prototype = new events.EventEmitter;
+
+Server.prototype.start = function(callback){
+  var self = this;
+  this.utp = utp.createServer();
+  this.rpc.setUTP(this.utp);
+  var canChangePort = !this.port;
+  this.port = this.port || randomPort();
+  
+  spawnDHT(function(){
+    self.utp.listen(self.port, utpListening, tryAgain);
+  });
+
+  function spawnDHT(cb){
+    kad.Dht.spawn(self.rpc, [], function(err, dht){
+      if(err || !dht) {
+        console.trace(err);
+        return setTimeout(spawnDHT.bind(this, cb), 1000);
+      }
+      self.dht = dht;
+      cb();
+    });
+  }
+  
+  function utpListening(){
+    self.http = http.Server(self.app);
+    self.http.once('error', disconnectUTPtryAgain);
+    self.http.listen(self.port, '0.0.0.0', function(){
+    
+      self.http.removeListener('error', disconnectUTPtryAgain);
+      console.log('Server running at http://127.0.0.1:' + self.port + '/');
+      
+      self.emit('listening', self.port);
+      
+      console.log("UTP server running on port " + self.port);
+      self._bootstrap();
+      
+      // FIXME: run callback once all local resource have been parsed
+      if(callback) callback();
+
+      console.log('Using data directory at ' + self.datadir);
+      for(var i = 0; i < self.datadirs.length; i++) {
+        self.storage.addDataDir(self.datadirs[i]);
+      }
+      self.storage.setDataDir(self.datadir);
+    });
+  }
+  
+  function disconnectUTPtryAgain(){
+    self.utp.close();
+    tryAgain();
+  }
+  
+  function tryAgain(){
+    if(!canChangePort) throw new Error("Cannot bind to port " + self.port);
+    var oldPort = self.port;
+    self.port = randomPort();
+    console.log("Could not listen to UDP port " + oldPort + ", try with " + self.port);
+    self.utp.listen(self.port, utpListening, tryAgain);
+  }
+  
+  function randomPort(){
+    return rand.int(1024+1, 65535);
+  }
+};
 
 Server.prototype._rpcGetObject = function(fid, cb){
   if(!this.dht) return cb(Error("DHT not initialized"));
@@ -71,102 +142,35 @@ Server.prototype.addSeed = function(s){
     this.pendingseeds--;
     if(this.pendingseeds == 0) {
       this.emit("seeds", this.seeds)
+      this._bootstrap();
     }
   }.bind(this));
 };
 
-Server.prototype.registerSeedCallback = function(cb){
-  this.on("seeds", cb);
-  if(this.pendingseeds == 0 && this.seeds.length > 0) cb(this.seeds);
-};
+Server.prototype._bootstrap = function(){
+  if(!this.dht) return;
+  if(this.pendingseeds != 0) return;
+  if(this.seeds.length == 0) return;
 
-Server.prototype.start = function(){
   var self = this;
-  this.utp = utp.createServer();
-  this.rpc.setUTP(this.utp);
-  var canChangePort = !this.port;
-  this.port = this.port || randomPort();
-  this.utp.listen(this.port, utpListening, tryAgain);
-  
-  function utpListening(){
-    self.http = http.Server(self.app);
-    self.http.once('error', disconnectUTPtryAgain);
-    self.http.listen(self.port, '0.0.0.0', function(){
-    
-      self.http.removeListener('error', disconnectUTPtryAgain);
-      console.log('Server running at http://127.0.0.1:' + self.port + '/');
-      
-      self.emit('listening', self.port);
-      
-      self._spawnDHT();
+  console.log("Kad: Bootstrapping with " + self.seeds);
 
-      console.log('Using data directory at ' + self.datadir);
-      for(var i = 0; i < self.datadirs.length; i++) {
-        self.storage.addDataDir(self.datadirs[i]);
-      }
-      self.storage.setDataDir(self.datadir);
-    });
-  }
-  
-  function disconnectUTPtryAgain(){
-    self.utp.close();
-    tryAgain();
-  }
-  
-  function tryAgain(){
-    if(!canChangePort) throw new Error("Cannot bind to port " + self.port);
-    var oldPort = self.port;
-    self.port = randomPort();
-    console.log("Could not listen to UDP port " + oldPort + ", try with " + self.port);
-    self.utp.listen(self.port, utpListening, tryAgain);
-  }
-  
-  function randomPort(){
-    return rand.int(1024+1, 65535);
-  }
-};
-
-Server.prototype._spawnDHT = function(){
-  var self = this;
-  console.log("UTP server running on port " + this.port);
-  
-  kad.Dht.spawn(self.rpc, [], function(err, dht){
-    if(err || !dht) {
-      return console.log("Kad: DHT error: " + err);
+  self.dht.bootstrap(self.seeds, function(err){
+    if(err) {
+      console.log("Kad: DHT bootstrap error " + err);
+    } else {
+      console.log("Kad: DHT bootstrapped " + JSON.stringify(self.dht.getSeeds()));
     }
-    self.dht = dht;
-    var bootstrapped_once = false;
-    self.registerSeedCallback(function(seeds){
-      console.log("Kad: Bootstrapping with " + seeds);
-      dht.bootstrap(seeds, function(err){
-        if(err) {
-          console.log("Kad: DHT bootstrap error " + err);
-        } else {
-          console.log("Kad: DHT bootstrapped " + JSON.stringify(dht.getSeeds()));
-        }
-        if(!bootstrapped_once) {
-          bootstrapped_once = true;
-          self.findIPAddress(dht, self._publishStorage.bind(self, dht));
-        } else if(self.myaddr) {
-          self._publishStorage(dht, self.myaddr);
-        }
-      });
-    });
+    if(!self.bootstrapped_once) {
+      self.bootstrapped_once = true;
+      self._findIPAddress(self.dht, self._publishStorage.bind(self));
+    } else if(self.myaddr) {
+      self._publishStorage();
+    }
   });
 };
 
-Server.prototype._publishStorage = function(dht, myaddr){
-  console.log("Found self addr: " + myaddr);
-  //console.log("Kad: Publish filelist");
-  //console.log(this.storage.filelist);
-  for(var fid in this.storage.filelist){
-    this.publishItem(myaddr, dht, this.storage.filelist[fid], function(err) {
-      if(err) throw err;
-    });
-  }
-};
-
-Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) {
+Server.prototype._findIPAddress = function(dht, callback, oldaddr, num, timeout) {
   // FIXME: blacklist a contact from the list after too much failures
   // (don't remove it immediatly, if the problem is on our side we will loose
   // all our seeds)
@@ -216,39 +220,49 @@ Server.prototype.findIPAddress = function(dht, callback, oldaddr, num, timeout) 
     
     function keepAlive(){
       retried = true;
-      return self.findIPAddress(dht, callback, myaddr, num+1);
+      return self._findIPAddress(dht, callback, myaddr, num+1);
     }
   });
   
   function tryAgain(){
     retried = true;
-    return self.findIPAddress(dht, callback, oldaddr, num+1, 500);
+    return self._findIPAddress(dht, callback, oldaddr, num+1, 500);
   }
 };
 
+Server.prototype._publishStorage = function(){
+  console.log("Found self addr: " + this.myaddr);
+  //console.log("Kad: Publish filelist");
+  //console.log(this.storage.filelist);
+  for(var fid in this.storage.filelist){
+    this._publishStorageItem(this.storage.filelist[fid], function(err) {
+      if(err) console.trace(err);
+    });
+  }
+};
 
-Server.prototype.publishItem = function(myaddr, dht, f, cb){
+Server.prototype._publishStorageItem = function(f, cb){
   var data = {
-    file_at: myaddr,
-    node_id: dht.id.toString(),
+    file_at: this.myaddr,
+    node_id: this.dht.id.toString(),
   };
   if(f.site) {
     data.revision = f.site.revision;
     var subdata = {
-      file_at:  myaddr,
-      node_id:  dht.id.toString(),
+      file_at:  this.myaddr,
+      node_id:  this.dht.id.toString(),
       site_id:  f.id,
       revision: f.site.revision
     };
     for(var i = 0; i < f.site.all_ids.length; i++) {
       var subid = f.site.all_ids[i];
-      dht.multiset(kad.Id.fromHex(subid), dht.id.toString(), subdata, cb);
+      this.dht.multiset(kad.Id.fromHex(subid), this.dht.id.toString(), subdata, cb);
     }
   }
-  dht.multiset(kad.Id.fromHex(f.id), dht.id.toString(), data, cb);
+  this.dht.multiset(kad.Id.fromHex(f.id), this.dht.id.toString(), data, cb);
 };
 
-Server.prototype.refreshSites = function(sitelist, defaultRefresh){
+Server.prototype._refreshSites_ = function(sitelist, defaultRefresh){
   defaultRefresh = defaultRefresh || 1000 * 60 * 60; // 1 hour
   var now = new Date();
   var minNextRefresh = now + defaultRefresh;
@@ -268,14 +282,48 @@ Server.prototype.refreshSites = function(sitelist, defaultRefresh){
   return minNextRefresh - new Date();
 };
 
-Server.prototype.getObjectBuffered = function(fid, cb){
-  this.storage.getObjectBuffered(this.dht, this.rpc, fid, cb)
-}
+Server.prototype.getSite = function(dht, rpc, fid, cb) {
+  this.getObjectBuffered(fid, function(err, data, metadata){
+    var mh = new MetaHeaders(metadata.headers);
+    var h;
+    if(data) {
+      h = new SignedHeader(mh, hash.make(mh), verifysign);
+      h.parseText(data.toString(), fid);
+    }
+    return cb(err, h, metadata);
+  });
+};
 
-Server.prototype.putObject = function(fid, headers, data, cb) {
+Server.prototype.getObjectBuffered = function(fid, cb) {
+  this.getObjectStream(fid, function(err, stream, meta){
+    if(err) return HandleError(err);
+    if(!stream) return cb(); // No error but no data
+    
+    readAll(stream, function(err, data){
+      if(err) return HandleError(err);
+      cb(null, data, meta);
+    });
+      
+    function HandleError(err){
+      err.httpStatus = 502;
+      return cb(err);
+    }
+  });
+};
+
+Server.prototype.getObjectStream = function(fid, cb) {
+  this.storage.getObjectStream(this.dht, this.rpc, fid, cb)
+};
+
+Server.prototype.putObjectBuffered = function(fid, headers, data, cb) {
   var s = new stream.Readable();
   s.push(data);
   s.push(null);
 
-  this.storage.putObject(fid, headers, s, cb);
-}
+  this.putObject(fid, headers, s, cb);
+};
+
+Server.prototype.putObject = function(fid, headers, stream, cb) {
+  this.storage.putObject(fid, headers, stream, cb);
+};
+

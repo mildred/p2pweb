@@ -16,7 +16,7 @@ module.exports = function(srv){
   
   api.sendBlob = function(blob, blobid, mh, cb){
     var headers = mh.toHeaders(); // FIXME
-    srv.putObject(blobid, headers, blob, cb)
+    srv.putObjectBuffered(blobid, headers, blob, cb)
   };
 
   api.getBlob = function(blobid, cache, cb) { // cb(err, data:string, metaheaders)

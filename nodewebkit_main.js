@@ -72,7 +72,10 @@ new_seed_button.addEventListener('click', function(){
   srv.addSeed(new_seed_input.value);
 });
 
-srv.start();
+module.loaded = false;
+srv.start(function(){
+  module.loaded = true;
+});
 
 function updateStatus() {
   if(!srv.dht) return;

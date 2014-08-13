@@ -30,10 +30,16 @@ module.exports = function(server, kadrpc, storage){
 
   app.put('/obj/:fid', function(req, res){
     var fid = req.params.fid.toLowerCase();
-    storage.putObjectHTTP(fid, req, function(code, title, message){
-      res.setHeader("Content-Type", "text/plain");
-      res.writeHead(code, title);
-      res.end(message);
+    server.putObject(fid, req.headers, req, function(e){
+      if(e) {
+        res.setHeader("Content-Type", "text/plain");
+        res.writeHead(e.statusCode, e.statusMessage);
+        res.end(e.toString());
+      } else {
+        res.setHeader("Content-Type", "text/plain");
+        res.writeHead(201, "Created");
+        res.end(fid);
+      }
     });
   });
 
@@ -163,71 +169,6 @@ module.exports = function(server, kadrpc, storage){
     res.end();
   });
 
-  var proxyFile = function(res2, options){
-    var req = http.request(options, function(res){
-      if(res.headers['content-type'])
-        res2.setHeader("Content-Type", res.headers['content-type']);
-      res2.writeHead(res.statusCode, res.statusMessage);
-      res.on('data', function(chunk) {
-        res2.write(chunk);
-      })
-      res.on('end', function() {
-        res2.end();
-      });
-    });
-    req.on('error', function(e){
-      console.log(e);
-    });
-    req.end();
-  }
-
-  var redirectObjectNotFound = function(fid, path, res, opts) {
-    opts = opts || {};
-    res.setHeader("X-File-ID", fid)
-    if(path != "") res.setHeader("X-File-Path", path)
-    if(!server.dht) return failDHTNotInitilized(res);
-    server.dht.getall(kad.Id.fromHex(fid), function(err, data){
-      if(err) {
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(500, "Internal Server Error");
-        res.write("Error:\n" + err);
-        res.end();
-      } else if(data === undefined) {
-        res.setHeader("Content-Type", "text/plain");
-        res.writeHead(404, "Not Found");
-        res.write("Not Found: no contact to provide the data");
-        res.end();
-        //console.log(server.dht._routes);
-        //console.log(server.dht._routes.toString());
-      } else {
-        var availableDestinations = {};
-        for(k in data) {
-          if(!data[k].file_at) continue;
-          var dest = data[k].file_at
-          res.setHeader("X-Available-Location", dest)
-          availableDestinations[k] = dest;
-        }
-        var destination = random.value(availableDestinations);
-        //console.log(availableDestinations);
-        //console.log(random.key(availableDestinations));
-        kadrpc.getObjectStream(destination, fid, 3, function(err, stream, meta){
-          if(err){
-            res.setHeader("Content-Type", "text/plain");
-            res.writeHead(502, "Bad Gateway");
-            res.end("Received error from node " + destination + ":\n" + (err.toString() || "No error given"));
-          } else {
-            for(h in meta.headers) {
-              res.setHeader(h, meta.headers[h]);
-            }
-            console.log(meta);
-            
-            stream.pipe(res);
-          }
-        });
-      }
-    });
-  };
-
   var serveFile = function(fid, res, query, opts){
     opts = opts || {}
     var file = storage.filelist[fid];
@@ -237,7 +178,7 @@ module.exports = function(server, kadrpc, storage){
       return;
     }
     
-    storage.getObjectStream(server.dht, kadrpc, fid, function(err, stream, metadata){
+    server.getObjectStream(fid, function(err, stream, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);
@@ -302,7 +243,7 @@ module.exports = function(server, kadrpc, storage){
     if(!path)
       return serveFile(fid, res, req.query, {query_string: query_string});
     
-    storage.getSite(server.dht, kadrpc, fid, function(err, h, metadata){
+    server.getSite(fid, function(err, h, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);

@@ -179,13 +179,6 @@ Storage.prototype._addfile = function(file) {
   });
 };
 
-Storage.prototype.putObjectHTTP = function(fid, req, callback){
-  this.putObject(fid, req.headers, req, function(e){
-    if(e) return callback(e.statusCode, e.statusMessage, e);
-    return callback(201, "Created", fid);
-  }, end);
-};
-
 Storage.prototype.putObject = function(fid, headers, stream, callback) {
   // FIXME: atomic operation (incl metadata)
   var mh = new MetaHeaders(headers);
@@ -290,39 +283,6 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
     });
   });  
 }
-
-// cb(err, h, metadata)
-//
-Storage.prototype.getSite = function(dht, rpc, fid, cb) {
-  this.getObjectBuffered(dht, rpc, fid, function(err, data, metadata){
-    var mh = new MetaHeaders(metadata.headers);
-    var h;
-    if(data) {
-      h = new SignedHeader(mh, hash.make(mh), verifysign);
-      h.parseText(data.toString(), fid);
-    }
-    return cb(err, h, metadata);
-  });
-};
-
-Storage.prototype.getObjectBuffered = function(dht, rpc, fid, cb) {
-  this.getObjectStream(dht, rpc, fid, function(err, stream, meta){
-    if(err) return HandleError(err);
-    
-    readAll(stream, function(err, data){
-      if(err) return HandleError(err);
-      // FIXME: streaming
-      console.log("getObject(" + fid + "): got data (" + data.length + " bytes, streaming finished)");
-      cb(null, data, meta);
-    });
-      
-    function HandleError(err){
-      console.log("getObject(" + fid + "): " + err.toString());
-      err.httpStatus = 502;
-      return cb(err);
-    }
-  });
-};
 
 // getObject: fetch an object, either from the cache or from the DHT.
 // FIXME: store in cache
