@@ -47,7 +47,7 @@ function updateSite(localSiteList, saveSite, sitenum, site, privateKey){
   input_title.addEventListener('change', function(){
     saveSite(site);
     updateSite(localSiteList, saveSite, sitenum, site);
-  })
+  });
 
   var opener = keytools.install_file_opener(btn_sign_rev);
 

@@ -37,3 +37,10 @@ aside {
 nav {
   float: right;
 }
+.hidden {
+  display: none;
+}
+
+#section-status .data dl {
+  margin-top: 0;
+}

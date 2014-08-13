@@ -1,6 +1,7 @@
 
 function MetaHeaders(h){
   this.headers = [];
+  this.metaHeaders = true;
   if(typeof h == "string") {
     this.fromString(h);
   } else if(h instanceof MetaHeaders) {
@@ -13,7 +14,10 @@ function MetaHeaders(h){
 }
 
 MetaHeaders.fromContentType = function(content_type){
-  return new MetaHeaders({"content-type": content_type});
+  return new MetaHeaders({
+    "content-type": content_type,
+    "x-p2pws-signed-headers": "content-type"
+  });
 };
 
 MetaHeaders.prototype.fromString = function(str){
@@ -39,7 +43,7 @@ MetaHeaders.prototype.fromString = function(str){
 
 MetaHeaders.prototype.fromHeaders = function(h){
   var signed_headers = (typeof h == 'function') ? h('x-p2pws-signed-headers') : h['x-p2pws-signed-headers'];
-  var headers = (signed_headers || "").split(/\s+/).filter(function(x){ x.length > 0; });
+  var headers = (signed_headers || "").split(/\s+/).filter(function(x){ return x.length > 0; });
   for(var i = 0; i < headers.length; ++i) {
     var headerval = (typeof h == 'function') ? h(headers[i]) : h[headers[i]];
     this.headers.push({
@@ -56,6 +60,13 @@ MetaHeaders.prototype.toString = function(){
     res += h.name + ": " + h.value.replace(/\n/g, "\n ") + "\n";
   }
   return res;
+};
+
+MetaHeaders.prototype.getHeader = function(name){
+  for(var i = 0; i < this.headers.length; ++i) {
+    var header = this.headers[i]
+    if(header.name == name) return header.value;
+  }
 };
 
 MetaHeaders.prototype.toHeaders = function(h){

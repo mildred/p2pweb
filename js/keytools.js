@@ -1,5 +1,48 @@
 var saveAs = require('./filesaver/FileSaver');
 
+module.exports.generate_file_opener = function(button, callback){
+  return function(){
+    var file_opener = button.querySelector("input[type=file]");
+    if(!file_opener) {
+      button.insertAdjacentHTML('afterbegin', 
+        '<input type="file" value="Open from file" style="display:none"/>');
+      file_opener = button.querySelector("input[type=file]");
+    } else {
+      file_opener.outerHTML = '<input type="file" value="Open from file" style="display:none"/>';
+    }
+    
+    file_opener.addEventListener('change', onChange);
+    file_opener.addEventListener('click', function(event){
+      event.stopPropagation(); // avoid triggering the outer button
+    });
+    
+    function onChange(){
+      var files = file_opener.files;
+      if(files.length != 1) {
+        return callback('No private key file');
+      }
+
+      var reader = new FileReader();
+      reader.onload = function(event) {
+        var content = event.target.result;
+        var crypt = new JSEncrypt();
+        crypt.setKey(content);
+        if(crypt.key.hasPrivateKeyProperty(crypt.key)) {
+          return callback(null, crypt.getPrivateKey(), crypt);
+        } else {
+          return callback(null, null, crypt);
+        }
+      };
+      reader.onerror = function(event) {
+        return callback(event.target.error);
+      };
+      reader.readAsText(files[0]);
+    }
+    
+    file_opener.click();
+  };
+};
+
 module.exports.install_file_opener = function(button){
   var callback;
   var file_opener = button.querySelector("input[type=file]");
@@ -7,9 +50,13 @@ module.exports.install_file_opener = function(button){
     button.insertAdjacentHTML('afterbegin', 
       '<input type="file" value="Open from file" style="display:none"/>');
     file_opener = button.querySelector("input[type=file]");
+  } else {
+    file_opener.outerHTML = '<input type="file" value="Open from file" style="display:none"/>';
   }
   
-  file_opener.addEventListener('change', function(){
+  file_opener.addEventListener('change', onChange);
+  
+  function onChange(){
     var files = file_opener.files;
     if(files.length != 1) {
       return callback('No private key file');
@@ -30,7 +77,7 @@ module.exports.install_file_opener = function(button){
       return callback(event.target.error);
     };
     reader.readAsText(files[0]);
-  });
+  }
   
   return function(cb){
     callback = cb;
@@ -40,9 +87,10 @@ module.exports.install_file_opener = function(button){
 
 module.exports.install_open_key_handler = function(button, callback){
   var opener = module.exports.install_file_opener(button);
-  button.addEventListener('click', function(){
+  button.addEventListener('click', onClick);
+  function onClick(){
     opener(callback);
-  });
+  }
 };
   
 module.exports.save_private_crypt_handler = function(crypt, callback) {

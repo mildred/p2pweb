@@ -59,6 +59,15 @@
       <div class="data-list">
         <dd class="data">
           <span class="data-id"></span>
+          (<a href="" class="lnk-view internal-popup">view file</a>,
+           <a href="" class="lnk-view-source internal-popup">view source</a>,
+           <a href="javascript:alert('TODO');" class="lnk-delete">delete</a><span class="missing">)
+          <dl>
+            <div class="relation">
+              <dt class="rel-name"></dt>
+              <div class="children"></div>
+            </div>
+          </dl>
         </dd>
       </div>
     </dl>
@@ -114,7 +123,7 @@
       <span></span>
     </p>
     <p class="website">Website ID: <span></span></p>
-    <p>
+    <p class="save-privkey">
       You need to keep your private key in a secure place. The private key is a
       file that you can use to update your site. Without it, it is absolutely
       not possible to update it. If someone steal this key from you, anyone
@@ -122,7 +131,8 @@
       <br/>
       <button class="btn-save">Save Private Key</button>
     </p>
-    <button class="btn-ok">OK</button>
+    <button class="btn-continue-no-save">Continue without saving</button>
+    <button class="btn-continue">Continue</button>
   </section>
 </body>
 </html>

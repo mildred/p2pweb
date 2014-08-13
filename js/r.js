@@ -172,7 +172,7 @@ function resolve(context, mod) {
   while(m2 != m) {
     m = m2;
     m2 = m2.replace(/\/+/g, "/");
-    m2 = m2.replace(/\/[^\/\.]\/\.\.\//g, "/");
+    m2 = m2.replace(/\/[^\/\.\/][^\/]*\/\.\.\//g, "/");
     m2 = m2.replace(/\/\.[^\/]+\/\.\.\//g, "/");
     m2 = m2.replace(/\/.\//g, "/");
   }

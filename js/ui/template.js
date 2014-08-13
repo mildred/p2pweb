@@ -9,7 +9,7 @@ function template(selector, directives) {
     window.document.querySelector(selector).outerHTML = template(data);
     var event = new Event('template-push', {bubbles: true});
     window.document.querySelector(selector).dispatchEvent(event);
-  }
+  };
   return template;
 }
 
@@ -40,7 +40,23 @@ exports.status.seeds = template("#section-status .seeds", {
 exports.status.data = template("#section-status .data-list", {
   ".data": {
     "d<-data": {
-      ".data-id": "d.id"
+      ".data-id": "d.id",
+      "a.lnk-view@href": "/obj/#{d.id}",
+      "a.lnk-view-source@href": "/obj/#{d.id}?content-type=text/plain",
+      "@class+": function(ctxt){
+        return (ctxt.d.item.missing ? " missing" : "");
+      },
+      ".relation": {
+        "rel<-d.relations": {
+          ".rel-name": "rel.relation",
+          ".children": function(ctxt){
+            return exports.status.data({data: ctxt.rel.item.children});
+          },
+          ".children@class": function(ctxt){
+            return (ctxt.rel.item.children.length == 0 ? "hidden" : "");
+          }
+        }
+      }
     }
   }
 });

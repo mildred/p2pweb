@@ -119,9 +119,10 @@ TODO
   (done, reported the error differently)
 - `[ ]` when failed to save a page, notify the user of the failure, and when
   returning to the text editor, make sure that the txt is not discarded.
-- `[ ]` when opening a link outside the interface, open in a new window by default
+- `[?]` when opening a link outside the interface, open in a new window by default
   (especially with node-webkit, either open in a new window or with the
   browser)
+- `[ ]` don't add .meta files of the data directory to the storage
 
 Roadmap
 -------
@@ -130,9 +131,9 @@ Roadmap
   with the file. Define a format for it. implementation: look at all the
   occurences of sha1hex on the client side, don't put the headers and the
   content in a single string for hashing, rather call the hashng function twice.
-- `[ ]` add metadata for each file in the data directory to tell why it is there:
-    - part of a website (tell which)
-    - viewed recently (when)
+- `[x]` add metadata for each file in the data directory to tell why it is there:
+    - part of a website (tell which), information is in the website
+    - viewed recently (when), it will be in a separate cache directory and use atime / mtime
     - it is a website the user created / decided to keep
 - `[ ]` implement website auto download for websites we created / want to keep. Try to
   have this working in almost real time. Implement notification system.

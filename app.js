@@ -303,7 +303,7 @@ module.exports = function(server, kadrpc, storage){
     if(!path)
       return serveFile(fid, res, req.query, {query_string: query_string});
     
-    storage.getObject(server.dht, kadrpc, fid, function(err, h, metadata){
+    storage.getSite(server.dht, kadrpc, fid, function(err, h, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);

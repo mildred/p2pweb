@@ -27,7 +27,7 @@ module.exports = function(api){
   // SignedHeader
   //
 
-  function saveSite(site){
+  function saveSite(site, cb){
     //console.log(site);
     api.sendBlob(site.text, site.getFirstId(), site.mh, function(e, id){
       if(e) {
@@ -36,6 +36,7 @@ module.exports = function(api){
         // FIXME: we shouldn't reload in case of error because we are loosing changes here
       } else {
         //console.log("PUT /obj/" + id + " ok");
+        if(cb) cb();
       }
     });
   }
@@ -62,7 +63,11 @@ module.exports = function(api){
         alert("Could not load site " + siteKey + ":\nit has disappeared");
         return callback();
       }
-      var site = new SignedHeader(mh,hash.make(mh), sign.checksign);
+      if(!/^application\/vnd.p2pws(;.*)?$/.test(mh.getHeader("content-type"))) {
+        alert("Blob " + siteKey + " is not a P2PWebSite: wrong content type");
+        return callback();
+      }
+      var site = new SignedHeader(mh, hash.make(mh), sign.checksign);
       site.parseText(content, siteKey);
       
       localSiteList.updateSite(siteKey, site);
@@ -102,35 +107,58 @@ module.exports = function(api){
       r.go("#!/site/" + website_id.value);
     }
   });
-
-  r.on("/site/new", function(){
-    document.querySelectorAll("section.showhide").hide();
+  
+  (function(){ // TODO: put that in a separate file
     var section = document.querySelector("section#section-new-website");
-    section.show();
     var website_id = section.querySelector(".website input");
     var btn_save   = section.querySelector(".btn-save");
     var btn_open   = section.querySelector(".btn-open");
     var btn_generate = section.querySelector(".btn-generate");
-    var btn_ok     = section.querySelector(".btn-ok");
-    var span_wid   = section.querySelector(".website span")
-    var keylabel   = section.querySelector(".privkey span");
-
-    btn_ok.disabled = true;
-    btn_save.disabled = true;
-    
-    keytools.install_open_key_handler(btn_open, function(err, _, crypt){
-      KeyAvailable(crypt, false);
-    });
-    btn_generate.addEventListener('click',
-      keytools.generate_private_crypt_handler(1024, function(txt, crypt){
-        console.log(txt);
-        keylabel.textContent = txt;
-        if(crypt) KeyAvailable(crypt, true);
-      }));
-    
+    var btn_cont_ok  = section.querySelector(".btn-continue");
+    var btn_cont_no  = section.querySelector(".btn-continue-no-save");
+    var website_elem = section.querySelector(".website")
+    var span_wid     = section.querySelector(".website span")
+    var privkey_elem = section.querySelector(".privkey");
+    var keylabel     = section.querySelector(".privkey span");
+    var save_pkey_elem = section.querySelector(".save-privkey");
+      
     var crypt;
     var site;
     var id;
+
+    btn_open    .addEventListener('click', keytools.generate_file_opener(btn_open, OpenPrivateKey));      
+    btn_generate.addEventListener('click', keytools.generate_private_crypt_handler(1024, GeneratePrivateKey));
+    btn_save    .addEventListener('click', SavePrivateKey);
+    btn_cont_ok .addEventListener('click', GoToSite);
+    btn_cont_no .addEventListener('click', GoToSite);
+    
+    function Enter(){
+      document.querySelectorAll("section.showhide").hide();
+      section.show();
+
+      website_elem.hide();
+      save_pkey_elem.hide();
+      btn_cont_ok.hide();
+      btn_cont_no.hide();
+    }
+    
+    function GeneratePrivateKey(txt, crypt){
+      console.log(txt);
+      keylabel.textContent = txt;
+      privkey_elem.show();
+      if(crypt) {
+        KeyAvailable(crypt, true);
+        btn_cont_no.show();
+        btn_cont_ok.hide();
+      }
+    }
+    
+    function OpenPrivateKey(err, _, crypt){
+      alert("open privkey");
+      KeyAvailable(crypt, false);
+      btn_cont_no.hide();
+      btn_cont_ok.show();
+    }
 
     function KeyAvailable(crypt_, generated){
       var mh = MetaHeaders.fromContentType("application/vnd.p2pws");
@@ -139,23 +167,27 @@ module.exports = function(api){
       site.addHeader("Format", "P2P Website");
       site.addHeader("PublicKey", crypt.getKey().getPublicBaseKeyB64());
       site.addSignature(sign.sign(crypt));
-      saveSite(site);
       id = site.getFirstId();
       span_wid.textContent = id;
-      
-      btn_save.disabled = false;
-      btn_ok.disabled = generated;
+      website_elem.show();
+      save_pkey_elem.show();
+      saveSite(site, function(){
+        if(!generated) GoToSite();
+      });
+    }
+    
+    function SavePrivateKey(){
+      keytools.save_private_crypt_handler(crypt);
+      btn_cont_no.hide();
+      btn_cont_ok.show();
+    }
+    
+    function GoToSite(){
+      r.go("#!/site/" + id);
     }
 
-    btn_save.addEventListener('click', function(){
-      keytools.save_private_crypt_handler(crypt);
-      btn_ok.disabled = false;
-    });
-
-    btn_ok.addEventListener('click', function(){
-      r.go("#!/site/" + id);
-    });
-  });
+    r.on("/site/new", Enter);
+  })();
 
   r.on(/^\/site\/([0-9a-fA-F]+)$/, function(req){
     document.querySelectorAll("section.showhide").hide();
@@ -227,6 +259,8 @@ module.exports = function(api){
     document.querySelectorAll("section.showhide").hide();
     if(typeof process == "object" && process.versions.node) r.go("#!/status")
   });
+
+  // TODO: while waiting for the DHT to initialize, don't run the router
 
   r.run();
 

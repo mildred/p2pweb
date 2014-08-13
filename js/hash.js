@@ -6,7 +6,7 @@ if(typeof process == "object" && process.versions.node) {
   var crypto = ((window || {}).require || require)('crypto');
 
   module.exports.make = function(h) {
-    if(!(h instanceof MetaHeaders)) throw new Error("hash.make should take a MetaHeaders instance");
+    if(!h.metaHeaders) throw new Error("hash.make should take a MetaHeaders instance");
     h = h.toString();
     return function(x){
       var sum = crypto.createHash('sha1');
@@ -17,7 +17,7 @@ if(typeof process == "object" && process.versions.node) {
   };
 
   module.exports.makeStream = function(h) {
-    if(!(h instanceof MetaHeaders)) throw new Error("hash.make should take a MetaHeaders instance");
+    if(!h.metaHeaders) throw new Error("hash.make should take a MetaHeaders instance");
     var sum = crypto.createHash('sha1');
     sum.update(h.toString());
     sum.getHex = function(){
@@ -29,7 +29,7 @@ if(typeof process == "object" && process.versions.node) {
 } else {
 
   module.exports.make = function(h) {
-    if(!(h instanceof MetaHeaders)) throw new Error("hash.make should take a MetaHeaders instance");
+    if(!h.metaHeaders) throw new Error("hash.make should take a MetaHeaders instance");
     h = h.toString();
     return function(x) {
       return sha1hex(h + x);

@@ -13,10 +13,28 @@ var SignedHeader = require('./js/signedheader');
 function Storage() {
   this.filelist = {};
   this.sitelist = {};
+  this.depends  = {};
+    // id: {
+    //   pin: true|false,
+    //   source-id: relation,
+    //   source-id: relation,
+    //   ...
+    // }
+    // relations:
+    //   "site-item"    if id is an item for the site source-id
+    //   "site-version" if id is a version of the site source-id
+  this.rdepends  = {};
   this.datadir  = __dirname + '/data';
 }
 
 Storage.prototype = new events.EventEmitter;
+
+Storage.prototype._register_dependency = function(id, source_id, relation) {
+  if(!this.depends[id])         this.depends[id] = {};
+  if(!this.rdepends[source_id]) this.rdepends[source_id] = {};
+  this.depends[id][source_id]  = relation;
+  this.rdepends[source_id][id] = relation;
+}
 
 Storage.prototype.setDataDir = function(dir){
   this.datadir = dir;
@@ -29,13 +47,19 @@ Storage.prototype.addDataDir = function(dir){
 
 Storage.prototype.getCacheSiteList = function(){
   return Object.keys(this.sitelist).map(function(id){
-    return this.sitelist[id];
+    var info = this.sitelist[id];
+    info.depends  = this.depends[id]  || {};
+    info.rdepends = this.rdepends[id] || {};
+    return info;
   }, this);
 };
 
 Storage.prototype.getCacheFileList = function(){
   return Object.keys(this.filelist).map(function(id){
-    return this.filelist[id];
+    var info = this.filelist[id];
+    info.depends  = this.depends[id]  || {};
+    info.rdepends = this.rdepends[id] || {};
+    return info;
   }, this);
 };
 
@@ -59,6 +83,11 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
       all_ids:    all_ids,
       revision:   h.getLastSignedSection()
     };
+
+    var fileList = h.getFileList();
+    for(filePath in fileList) {
+      this._register_dependency(fileList[filePath].id, fid, "site-item");
+    }
   } else {
     all_signed_ids = [fid];
     all_extra_ids  = [];
@@ -85,6 +114,7 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
   function registerSubId(id, i, signed){
     console.log("Register " + id + " #" + i + (signed ? "" : "?") + " " + path);
     if(id == fid) return;
+    self._register_dependency(id, fid, "site-version");
     self.filelist[id] = {
       id: id,
       metadata: metadata,
@@ -164,6 +194,7 @@ Storage.prototype.putObjectHTTP = function(fid, req, callback){
 };
 
 Storage.prototype.putObject = function(fid, headers, callback, cbend) {
+  // FIXME: use streams, atomic operation (incl metadata)
   var mh = new MetaHeaders(headers);
   var self = this;
   var filename = path.join(this.datadir, fid);
@@ -187,7 +218,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
       e.statusMessage = "Internal Error";
       if(cbend) cbend(e);
       stop = true;
-    })
+    });
 
     function ondata(d){
       sum.update(d);
@@ -202,7 +233,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
         return;
       }
 
-      var digest = sum.gethex();
+      var digest = sum.getHex();
       var real_fid = digest;
       var all_signed_ids = [real_fid];
       var h;
@@ -215,7 +246,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
 
       if(real_fid != fid) {
         fs.unlink(filename_temp, logerror);
-        var e = new Error("Incorrect Identifier, expected " + real_fid + " instad of " + fid);
+        var e = new Error("Incorrect Identifier, expected " + real_fid + " instead of " + fid + (is_p2pws ? " (first side id)" : ""));
         e.statusCode = 400;
         e.statusMessage = "Bad Request";
         console.error(e);
@@ -251,7 +282,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
           return cbend(e);
         }
         var metadata = {
-          headers: { "content-type": headers["content-type"] }
+          headers: headers
         };
         self.register_file(fid, filename, metadata, h);
         cbend(null, fid);
@@ -273,7 +304,7 @@ Storage.prototype.getSite = function(dht, rpc, fid, cb) {
     }
     return cb(err, h, metadata);
   });
-}
+};
 
 // getObject: fetch an object, either from the cache or from the DHT.
 // FIXME: don't transmit full data but transmit in chunks
@@ -284,18 +315,14 @@ Storage.prototype.getObject = function(dht, rpc, fid, cb) {
   var f = this.filelist[fid];
   if(f) {
     console.log("getObject(" + fid + "): file available locally");
-    fs.open(f.path, 'r', function (err, fh) {
+    var fh = fs.createReadStream(f.path, {flags: 'r'});
+    readAll(fh, function(err, buf){
       if(err) {
         err.httpStatus = 500;
         return cb(err);
       }
-      readAll(fh, function(err, buf){
-        if(err) {
-          err.httpStatus = 500;
-          return cb(err);
-        }
-        cb(null, buf.toString(), f.metadata);
-      });
+      cb(null, buf.toString(), f.metadata);
+      fh.close();
     });
     return;
   }
@@ -379,7 +406,7 @@ Storage.prototype.refreshSite = function(rpc, site) {
       }
     });
   });
-}
+};
 
 function isp2pws(headers){
   return /^application\/vnd.p2pws(;.*)?$/.test(headers["content-type"]);

@@ -21,7 +21,7 @@ module.exports = function(srv){
 
   api.getBlob = function(blobid, cache, cb) { // cb(err, data:string, metaheaders)
     srv.getObject(blobid, function(err, data, metadata){
-      var mh = new MetaHeaders(metadata.headers);
+      var mh = data ? new MetaHeaders(metadata.headers) : null;
       cb(err, data, mh);
     });
   };

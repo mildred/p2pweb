@@ -82,9 +82,32 @@ function updateStatus() {
     seeds: seeds
   });
   
-  var datalist = srv.storage.getCacheFileList();
+  var datalist  = srv.storage.getCacheFileList();
+  var datalistr = datalist.filter(function(item){
+    return Object.keys(item.depends).length == 0;
+  }).map(fillRelations);
+  
+  function fillRelations(item){
+    item.rel = {};
+    item.relations = [];
+    for(subid in item.rdepends) {
+      var relation = item.rdepends[subid];
+      var subitem = datalist[subid];
+      if(!subitem) {
+        subitem = {id: subid, missing: true};
+      }
+      if(!item.rel[relation]) {
+        var rel = {relation: relation, children: []};
+        item.rel[relation] = rel;
+        item.relations.push(rel);
+      }
+      item.rel[relation].children.push(fillRelations(subitem));
+    }
+    return item;
+  }
+
   template.status.data.push({
-    data: datalist
+    data: datalistr
   });
 };
 
