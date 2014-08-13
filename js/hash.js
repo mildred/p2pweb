@@ -3,7 +3,7 @@ var MetaHeaders = require('./metaheaders');
 
 if(typeof process == "object" && process.versions.node) {
 
-  var crypto = ((window || {}).require || require)('crypto');
+  var crypto = (global.require || require)('crypto');
 
   module.exports.make = function(h) {
     if(!h.metaHeaders) throw new Error("hash.make should take a MetaHeaders instance");

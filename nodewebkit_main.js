@@ -58,12 +58,16 @@ srv.on('listening', function(port) {
 
 srv.on("public-address", function(address, remote_address){
   var now = moment();
-  template.status.public_addr.push({
-    address:        address,
-    remote_address: remote_address,
-    date:           now.format(),
-    dateFromNow:    now.fromNow()
-  });
+  try {
+    template.status.public_addr.push({
+      address:        address,
+      remote_address: remote_address,
+      date:           now.format(),
+      dateFromNow:    now.fromNow()
+    });
+  } catch(e) {
+    alert(address + "\n" + e);
+  }
 });
 
 var new_seed_input  = window.document.querySelector("#section-status .new-seed input[type=text]");

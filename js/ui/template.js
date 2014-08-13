@@ -7,7 +7,7 @@ function template(selector, directives) {
   var template = p.compile(directives);
   template.push = function(data){
     window.document.querySelector(selector).outerHTML = template(data);
-    var event = new Event('template-push', {bubbles: true});
+    var event = new window.Event('template-push', {bubbles: true});
     window.document.querySelector(selector).dispatchEvent(event);
   };
   return template;

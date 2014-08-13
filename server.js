@@ -117,14 +117,14 @@ Server.prototype._rpcGetObject = function(fid, cb){
   fs.readFile(file.path, function (err, data) {
     if(err) {
       var str = JSON.stringify({error: err.toString()});
-      var buf = new Buffer(4 + err.length);
-      buf.writeInt32BE(err.length, 0);
+      var buf = new Buffer(4 + str.length);
+      buf.writeInt32BE(str.length, 0);
       buf.write(str, 4);
       cb(buf);
     } else {
       var str = JSON.stringify({ok: file.metadata});
-      var buf = new Buffer(4 + err.length);
-      buf.writeInt32BE(err.length, 0);
+      var buf = new Buffer(4 + str.length);
+      buf.writeInt32BE(str.length, 0);
       buf.write(str, 4);
       cb(buf);
       cb(data);
@@ -222,9 +222,12 @@ Server.prototype._findIPAddress = function(oldaddr, num, timeout) {
       if(!retried) setTimeout(tryAgain, 500);
       return;
     }
-    self.emit("public-address", myaddr.toString(), endpoint);
     self.myaddr = myaddr.toString();
-    if(oldaddr != myaddr) self._publishCompleteStorage();
+    self.emit("public-address", self.myaddr, endpoint);
+    if(oldaddr != myaddr) {
+      console.log("Found self addr: " + self.myaddr);
+      self._publishCompleteStorage();
+    }
     if(!retried) setTimeout(keepAlive, 20000);
     
     function keepAlive(){
@@ -240,7 +243,6 @@ Server.prototype._findIPAddress = function(oldaddr, num, timeout) {
 };
 
 Server.prototype._publishCompleteStorage = function(){
-  console.log("Found self addr: " + this.myaddr);
   //console.log("Kad: Publish filelist");
   //console.log(this.storage.filelist);
   for(var fid in this.storage.filelist){
@@ -255,14 +257,14 @@ Server.prototype._publishStorageItem = function(f, cb){
 
 Server.prototype._publishSite = function(siteid, revision, all_ids, cb){
   for(var i = 0; i < all_ids.length; i++) {
-    this._publishResource(all_ids[i], {revision: revision, site_id: siteid});
+    this._publishResource(all_ids[i], {revision: revision, site_id: siteid}, cb);
   }
-  this._publishResource(siteid, {revision: revision});
+  this._publishResource(siteid, {revision: revision}, cb);
   
   // In this function we want to find all other nodes that have this
   // site at a lower revision and notify them.
   var self = this;
-  this.dht.getall(kad.Id.fromHex(blobid), function(err, data){
+  this.dht.getall(kad.Id.fromHex(siteid), function(err, data){
     if(err) return console.log(err);
     if(!data) return;
     
@@ -351,7 +353,7 @@ Server.prototype._refreshSites_ = function(sitelist, defaultRefresh){
   return minNextRefresh - Date.now();
 };
 
-Storage.prototype._refreshSite = function(siteid, siterev) {
+Server.prototype._refreshSite = function(siteid, siterev) {
   var self = this;
   dht.getall(kad.Id.fromHex(siteid), function(err, data){
     if(err) return console.error("Refresh site " + siteid + " error: " + err);
@@ -379,7 +381,7 @@ Storage.prototype._refreshSite = function(siteid, siterev) {
   });
 };
 
-Storage.prototype._refreshSiteFromSource = function(siteid, source, callback) {
+Server.prototype._refreshSiteFromSource = function(siteid, source, callback) {
   var self = this;
   this.rpc.getObjectStream(source, siteid, function(err, stream, meta){
     if(err) return console.error("Refresh site " + siteid + " error contacting " + source + ": " + err);

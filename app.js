@@ -185,7 +185,7 @@ module.exports = function(server, kadrpc, storage){
         res.end("Error:\n" + err);
         return;
       }
-      if(!data) {
+      if(!stream) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(404, "Not Found");
         res.end("File Not Found");

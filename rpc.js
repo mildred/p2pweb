@@ -103,7 +103,7 @@ RPC.prototype.setUTP = function(utpServer) {
       if(requestObj.request == 'object') {
         RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
         self._getObject(requestObj.fid, function(buf){
-          if(!buf) reply();
+          if(!buf) return reply();
           RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + buf.length);
           reply(buf);
         });
@@ -218,7 +218,7 @@ RPC.prototype.requestStream = function(endpoint, request, timeout, callback) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
       return callback(err);
     }
-    if(callback(null, utp, addr) !== false) utp.end();
+    if(callback(null, utp, addr, requestURL) !== false) utp.end();
   });
   
   function onTimeOut(){
@@ -228,7 +228,11 @@ RPC.prototype.requestStream = function(endpoint, request, timeout, callback) {
 }
 
 RPC.prototype.request = function(endpoint, request, timeout, callback) {
-  this.requestStream(endpoint, request, timeout, function(err, utp, addr){
+  if(typeof timeout == 'function') {
+    callback = timeout;
+    timeout = undefined;
+  }
+  this.requestStream(endpoint, request, timeout, function(err, utp, addr, requestURL){
     if(err) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
       return callback(err);
@@ -289,13 +293,16 @@ RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
     function ReadHeaderSize(){
       var size = stream.read(4);
       if(!size) return stream.once('readable', ReadHeaderSize);
+      console.log(size.length);
+      if(size.length > 4) stream.unshift(size.slice(4));
       return ReadHeader(size.readInt32BE(0));
     }
 
     function ReadHeader(size){
       var header = stream.read(size);
       if(!header) return stream.once('readable', ReadHeader.bind(this, size));
-      var meta = JSON.parse(header.toString());
+      if(header.length > size) stream.unshift(header.slice(size));
+      var meta = JSON.parse(header.slice(0, size).toString());
       
       if(!meta.ok) return cb(meta.error);
       
