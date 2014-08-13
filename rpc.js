@@ -52,17 +52,31 @@ RPC.prototype.setUTP = function(utpServer) {
 
       if(meta == "flush-request") {
         handleRequest(function(response){
-          connection.write(JSON.stringify(response));
-          var flush_response = new Buffer(data);
-          flush_response.meta = new Buffer("flush-response");
-          connection.write(flush_response);
+          if(response instanceof Buffer) {
+            connection.write(response);
+          } else if (response === undefined) {
+            var flush_response = new Buffer();
+            flush_response.meta = "flush-response";
+            connection.write(flush_response);
+          } else {
+            connection.write(JSON.stringify(response));
+            var flush_response = new Buffer();
+            flush_response.meta = "flush-response";
+            connection.write(flush_response);
+          }
         });
       }
     });
     
     connection.on('end', function(){
       handleRequest(function(response){
-        connection.end(JSON.stringify(response));
+        if(response instanceof Buffer) {
+          connection.write(response);
+        } else if (response === undefined) {
+          connection.end();
+        } else {
+          connection.end(JSON.stringify(response));
+        }
       });
     });
     
@@ -87,10 +101,10 @@ RPC.prototype.setUTP = function(utpServer) {
         
       if(requestObj.request == 'object') {
         RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
-        self._getObject(requestObj.fid, function(err, data){
-          RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + data.length);
-          if(err) return reply({error: err.toString()});
-          reply({ok: data});
+        self._getObject(requestObj.fid, function(buf){
+          if(!buf) reply();
+          RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ": " + buf.length);
+          reply(buf);
         });
         return;
       }
@@ -171,10 +185,9 @@ RPC.prototype._sendKad = function(type, endpoint, data, callback) {
   return this.request(endpoint, request, 30, callback);
 };
 
-RPC.prototype.request = function(endpoint, request, timeout, callback, callback2) {
+RPC.prototype.requestStream = function(endpoint, request, timeout, callback) {
   if(typeof endpoint != 'string') throw new Error("Invalid endpoint " + endpoint);
   if(typeof timeout == 'function') {
-    callback2 = callback;
     callback = timeout;
     timeout = undefined;
   }
@@ -197,19 +210,31 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
     if(timedOut)  return;
     if(err) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
-      if(callback2) return callback2(err);
+      return callback(err);
+    }
+    if(callback(null, utp, addr) !== false) utp.end();
+  });
+  
+  function onTimeOut(){
+    timedOut = true;
+    callback(new Error('timeout'));
+  }
+}
+
+RPC.prototype.request = function(endpoint, request, timeout, callback) {
+  this.requestStream(endpoint, request, timeout, function(err, utp, addr){
+    if(err) {
+      console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
       return callback(err);
     }
     
     var response = [];
     
     utp.on('data', function(resdata){
-      if(callback2) return callback(resdata);
       response.push(resdata);
     });
     
     utp.on('end', function(){
-      if(callback2) return callback2();
       var resBuffer = Buffer.concat(response);
       
       if(response.length == 0) {
@@ -242,23 +267,35 @@ RPC.prototype.request = function(endpoint, request, timeout, callback, callback2
       
       callback(null, response.ok);
     });
-    
-    utp.end();
   });
-  
-  function onTimeOut(){
-    timedOut = true;
-    if(callback2) return callback2(new Error('timeout'));
-    callback(new Error('timeout'));
-  }
 };
 
 RPC.prototype.getPublicURL = function(endpoint, timeout, cb) {
   return this.request(endpoint, {request: "publicURL"}, timeout, cb);
 };
 
-RPC.prototype.getObject = function(endpoint, fid, timeout, cbdata, cbend) { // FIXME: find something better suited for large files
-  return this.request(endpoint, {request: "object", fid: fid}, timeout, cbdata, cbend);
+RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
+  return this.requestStream(endpoint, {request: "object", fid: fid}, timeout, function(err, stream){
+    if(err) return cb(err.error);
+    
+    ReadHeaderSize();
+    
+    function ReadHeaderSize(){
+      var size = stream.read(4);
+      if(!size) return stream.once('readable', ReadHeaderSize);
+      return ReadHeader(size.readInt32BE(0));
+    }
+
+    function ReadHeader(size){
+      var header = stream.read(size);
+      if(!header) return stream.once('readable', ReadHeader.bind(this, size));
+      var meta = JSON.parse(header.toString());
+      
+      if(!meta.ok) return cb(meta.error);
+      
+      return cb(meta.error, stream, meta.ok);
+    }
+  });
 };
 
 RPC.prototype.ping = function(addr, data, cb) { return this._sendKad('ping', addr, data, cb); };

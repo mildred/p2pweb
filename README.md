@@ -123,6 +123,7 @@ TODO
   (especially with node-webkit, either open in a new window or with the
   browser)
 - `[ ]` don't add .meta files of the data directory to the storage
+- `[ ]` when computing dependencies, files from old revisions are not included (SignedHeader.getFileList)
 
 Roadmap
 -------

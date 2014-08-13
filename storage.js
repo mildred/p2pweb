@@ -180,21 +180,14 @@ Storage.prototype._addfile = function(file) {
 };
 
 Storage.prototype.putObjectHTTP = function(fid, req, callback){
-  this.putObject(fid, req.headers, function(err, ondata, onend){
-    if(err) return callback(err.statusCode, err.statusMessage, err);
-    
-    req.on('data', ondata);
-    req.on('end',  onend);
-  }, end);
-  
-  function end(e){
+  this.putObject(fid, req.headers, req, function(e){
     if(e) return callback(e.statusCode, e.statusMessage, e);
     return callback(201, "Created", fid);
-  }
+  }, end);
 };
 
-Storage.prototype.putObject = function(fid, headers, callback, cbend) {
-  // FIXME: use streams, atomic operation (incl metadata)
+Storage.prototype.putObject = function(fid, headers, stream, callback) {
+  // FIXME: atomic operation (incl metadata)
   var mh = new MetaHeaders(headers);
   var self = this;
   var filename = path.join(this.datadir, fid);
@@ -211,22 +204,28 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
       err.statusMessage = "Internal Error";
       return callback(err);
     }
-    callback(null, ondata, onend);
     
     fh.on('error', function(e){
       e.statusCode = 500;
       e.statusMessage = "Internal Error";
-      if(cbend) cbend(e);
+      callback(e);
       stop = true;
     });
-
-    function ondata(d){
+    
+    stream.on('error', function(e){
+      e.statusCode = 500;
+      e.statusMessage = "Internal Error";
+      callback(e);
+      stop = true;
+    });
+    
+    stream.on('data', function(d){
       sum.update(d);
       fh.write(d);
       if(is_p2pws) data.push(d);
-    }
+    });
     
-    function onend() {
+    stream.on('end', function(){
       fh.end();
       if(stop) {
         fs.unlink(filename_temp, logerror);
@@ -250,7 +249,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
         e.statusCode = 400;
         e.statusMessage = "Bad Request";
         console.error(e);
-        return cbend(e);
+        return callback(e);
       }
       
       if(is_p2pws){
@@ -269,7 +268,7 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
           e.httpStatus = 400;
           e.statusMessage = "Bad Request";
           console.error(e);
-          return cbend(e);
+          return callback(e);
         }
       }
       
@@ -279,51 +278,63 @@ Storage.prototype.putObject = function(fid, headers, callback, cbend) {
           e.httpStatus = 500;
           e.statusMessage = "Internal Error";
           console.error(e);
-          return cbend(e);
+          return callback(e);
         }
         var metadata = {
           headers: headers
         };
         self.register_file(fid, filename, metadata, h);
-        cbend(null, fid);
+        callback(null, fid);
         fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
       });
-    }
+    });
   });  
 }
 
 // cb(err, h, metadata)
 //
 Storage.prototype.getSite = function(dht, rpc, fid, cb) {
-  this.getObject(dht, rpc, fid, function(err, data, metadata){
+  this.getObjectBuffered(dht, rpc, fid, function(err, data, metadata){
     var mh = new MetaHeaders(metadata.headers);
     var h;
     if(data) {
       h = new SignedHeader(mh, hash.make(mh), verifysign);
-      h.parseText(data, fid);
+      h.parseText(data.toString(), fid);
     }
     return cb(err, h, metadata);
   });
 };
 
+Storage.prototype.getObjectBuffered = function(dht, rpc, fid, cb) {
+  this.getObjectStream(dht, rpc, fid, function(err, stream, meta){
+    if(err) return HandleError(err);
+    
+    readAll(stream, function(err, data){
+      if(err) return HandleError(err);
+      // FIXME: streaming
+      console.log("getObject(" + fid + "): got data (" + data.length + " bytes, streaming finished)");
+      cb(null, data, meta);
+    });
+      
+    function HandleError(err){
+      console.log("getObject(" + fid + "): " + err.toString());
+      err.httpStatus = 502;
+      return cb(err);
+    }
+  });
+};
+
 // getObject: fetch an object, either from the cache or from the DHT.
-// FIXME: don't transmit full data but transmit in chunks
 // FIXME: store in cache
 // cb(err, data, metadata)
 //
-Storage.prototype.getObject = function(dht, rpc, fid, cb) {
+Storage.prototype.getObjectStream = function(dht, rpc, fid, cb) {
   var f = this.filelist[fid];
   if(f) {
     console.log("getObject(" + fid + "): file available locally");
     var fh = fs.createReadStream(f.path, {flags: 'r'});
-    readAll(fh, function(err, buf){
-      if(err) {
-        err.httpStatus = 500;
-        return cb(err);
-      }
-      cb(null, buf.toString(), f.metadata);
-      fh.close();
-    });
+    cb(null, fh, f.metadata);
+    fh.once('end', fh.close.bind(fh));
     return;
   }
   
@@ -355,16 +366,7 @@ Storage.prototype.getObject = function(dht, rpc, fid, cb) {
     var destination = random.value(availableDestinations);
     console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
 
-    rpc.getObject(destination, fid, 3, function(err, reply){ // FIXME: timeout FIXME: data streaming
-      if(err) {
-        console.log("getObject(" + fid + "): " + err.toString());
-        err.httpStatus = 502;
-        return cb(err);
-      }
-      
-      console.log("getObject(" + fid + "): got data (" + reply.data.length + " bytes)");
-      cb(null, reply.data, reply.metadata);
-    });
+    rpc.getObjectStream(destination, fid, 3, cb);
   });
 };
 
@@ -390,20 +392,13 @@ Storage.prototype.refreshSite = function(rpc, site) {
     var source = random.value(source_addresses);
     console.log("Refresh site " + site.id + ": Choose " + source + " in " + JSON.stringify(source_addresses));
     
-    rpc.getObject(source, fid, function(err, reply){
+    rpc.getObjectStream(source, fid, function(err, stream, meta){
       if(err) return console.error("Refresh site " + site.id + " error contacting " + source + ": " + err);
-      console.log("Refresh site " + site.id + ": " + source + " responded with " + reply.data.length + " bytes");
-        
-      // FIXME: store in chunks
-      self.putObject(fid, reply.metadata.headers, function(err, ondata, onend){
-        if(err) return storeEnd(err);
-        ondata(reply.data);
-        onend();
-      }, storeEnd);
-      
-      function storeEnd(e){
+      console.log("Refresh site " + site.id + ": " + source + " responded with a data stream");
+
+      self.putObject(fid, meta.headers, stream, function(err){
         // FIXME: on error, try another source
-      }
+      });
     });
   });
 };

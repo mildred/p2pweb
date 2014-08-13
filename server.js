@@ -8,6 +8,7 @@ var utp        = require('utp');
 var http       = require('http');
 var rand       = require('./random');
 var events     = require('events');
+var stream     = require('stream');
 var storage    = require('./storage');
 
 
@@ -32,8 +33,21 @@ Server.prototype._rpcGetObject = function(fid, cb){
   if(!file) return cb(Error("File not available"));
   
   fs.readFile(file.path, function (err, data) {
-    if(err) return cb(err);
-    cb(null, {data: data.toString(), metadata: file.metadata});
+    if(err) {
+      var str = JSON.stringify({error: err.toString()});
+      var buf = new Buffer(4 + err.length);
+      buf.writeInt32BE(err.length, 0);
+      buf.write(str, 4);
+      cb(buf);
+    } else {
+      var str = JSON.stringify({ok: file.metadata});
+      var buf = new Buffer(4 + err.length);
+      buf.writeInt32BE(err.length, 0);
+      buf.write(str, 4);
+      cb(buf);
+      cb(data);
+    }
+    cb();
   });
 };
 
@@ -254,14 +268,14 @@ Server.prototype.refreshSites = function(sitelist, defaultRefresh){
   return minNextRefresh - new Date();
 };
 
-Server.prototype.getObject = function(fid, cb){
-  this.storage.getObject(this.dht, this.rpc, fid, cb)
+Server.prototype.getObjectBuffered = function(fid, cb){
+  this.storage.getObjectBuffered(this.dht, this.rpc, fid, cb)
 }
 
 Server.prototype.putObject = function(fid, headers, data, cb) {
-  this.storage.putObject(fid, headers, function(err, ondata, onend){
-    if(err) return cb(err);
-    ondata(data);
-    onend();
-  }, cb);
+  var s = new stream.Readable();
+  s.push(data);
+  s.push(null);
+
+  this.storage.putObject(fid, headers, s, cb);
 }

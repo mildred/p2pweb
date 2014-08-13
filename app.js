@@ -210,17 +210,18 @@ module.exports = function(server, kadrpc, storage){
         var destination = random.value(availableDestinations);
         //console.log(availableDestinations);
         //console.log(random.key(availableDestinations));
-        kadrpc.getObject(destination, fid, 3, function(err, reply){
-          if(err) {
+        kadrpc.getObjectStream(destination, fid, 3, function(err, stream, meta){
+          if(err){
             res.setHeader("Content-Type", "text/plain");
             res.writeHead(502, "Bad Gateway");
-            res.end("Received error from node " + destination + ":\n" + err.toString());
+            res.end("Received error from node " + destination + ":\n" + (err.toString() || "No error given"));
           } else {
-            for(h in reply.metadata.headers) {
-              res.setHeader(h, reply.metadata.headers[h]);
+            for(h in meta.headers) {
+              res.setHeader(h, meta.headers[h]);
             }
-            console.log(reply);
-            res.end(reply.data);
+            console.log(meta);
+            
+            stream.pipe(res);
           }
         });
       }
@@ -236,7 +237,7 @@ module.exports = function(server, kadrpc, storage){
       return;
     }
     
-    storage.getObject(server.dht, kadrpc, fid, function(err, data, metadata){
+    storage.getObjectStream(server.dht, kadrpc, fid, function(err, stream, metadata){
       if(err) {
         res.setHeader("Content-Type", "text/plain");
         res.writeHead(err.httpStatus || 500, err.httpStatusText);
@@ -250,10 +251,8 @@ module.exports = function(server, kadrpc, storage){
         return;
       }
       
-      // FIXME: stream data instead of buffering it
-      
       setHeaders(metadata);
-      res.end(data);
+      stream.pipe(res);
     });
     
     function setHeaders(metadata){
