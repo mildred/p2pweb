@@ -108,6 +108,11 @@ This work is licenced under the GNU GPL 3.0 or any later version at your option.
 Work in Progress
 ================
 
+- `[ ]` To Do
+- `[?]` Partially done (need checking)
+- `[.]` Code is there, but untested
+- `[x]` Done
+
 TODO
 ----
 
@@ -136,9 +141,9 @@ Roadmap
     - part of a website (tell which), information is in the website
     - viewed recently (when), it will be in a separate cache directory and use atime / mtime
     - it is a website the user created / decided to keep
-- `[ ]` implement website auto download for websites we created / want to keep. Try to
+- `[.]` implement website auto download for websites we created / want to keep. Try to
   have this working in almost real time. Implement notification system.
-- `[ ]` put p2pweb in a docker container and put an instance on the web
+- `[.]` put p2pweb in a docker container and put an instance on the web
 - `[ ]` create a website, update it locally, and check it is uploaded to the server
 
 make it work on cjdns

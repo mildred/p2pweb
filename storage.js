@@ -125,6 +125,8 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
       source_id: fid
     };
   }
+  
+  self.emit('new-resource', this.filelist[fid]);
 }
 
 Storage.prototype._addfile = function(file) {
@@ -286,6 +288,7 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
 
 // getObject: fetch an object, either from the cache or from the DHT.
 // FIXME: store in cache
+// FIXME: put the dht lookup part out of this module
 // cb(err, data, metadata)
 //
 Storage.prototype.getObjectStream = function(dht, rpc, fid, cb) {
@@ -327,39 +330,6 @@ Storage.prototype.getObjectStream = function(dht, rpc, fid, cb) {
     console.log("Choose " + destination + " in " + JSON.stringify(availableDestinations));
 
     rpc.getObjectStream(destination, fid, 3, cb);
-  });
-};
-
-Storage.prototype.refreshSite = function(rpc, site) {
-  var self = this;
-  dht.getall(kad.Id.fromHex(site.id), function(err, data){
-    if(err) return console.error("Refresh site " + site.id + " error: " + err);
-    if(!data) return console.log("Refresh site " + site.id + ": no data");
-    console.log("Refresh site " + site.id + ": network responded " + JSON.stringify(data));
-
-    var max_rev_available = site.revision + 1;
-    var source_addresses = [];
-    for(var k in data) {
-      var d = data[k];
-      if(!d.file_at || !d.revision || d.revision < max_rev_available) continue;
-      if(d.revision > max_rev_available) {
-        max_rev_available = d.revision;
-        source_addresses = [];
-      }
-      source_addresses.push(d.file_at);
-    }
-    
-    var source = random.value(source_addresses);
-    console.log("Refresh site " + site.id + ": Choose " + source + " in " + JSON.stringify(source_addresses));
-    
-    rpc.getObjectStream(source, fid, function(err, stream, meta){
-      if(err) return console.error("Refresh site " + site.id + " error contacting " + source + ": " + err);
-      console.log("Refresh site " + site.id + ": " + source + " responded with a data stream");
-
-      self.putObject(fid, meta.headers, stream, function(err){
-        // FIXME: on error, try another source
-      });
-    });
   });
 };
 

@@ -16,6 +16,9 @@ var verifysign   = require('./verifysign');
 var MetaHeaders  = require('./js/metaheaders');
 var SignedHeader = require('./js/signedheader');
 
+function logerror(e) {
+  if(e) console.trace(e);
+}
 
 module.exports = Server;
 function Server(){
@@ -30,6 +33,14 @@ function Server(){
   this.storage = new storage();
   this.app = app(this, this.rpc, this.storage);
   this.bootstrapped_once = false;
+  
+  this.storage.on('new-resource', function(item){
+    self._publishStorageItem(item, logerror);
+  });
+  
+  this.rpc.on('new-revision', function(sourceAddr, siteid, revision, revisionList){
+    self._refreshSiteFromSource(siteid, sourceAddr, logerror);
+  });
 }
 
 Server.prototype = new events.EventEmitter;
@@ -163,24 +174,22 @@ Server.prototype._bootstrap = function(){
     }
     if(!self.bootstrapped_once) {
       self.bootstrapped_once = true;
-      self._findIPAddress(self.dht, self._publishStorage.bind(self));
-    } else if(self.myaddr) {
-      self._publishStorage();
+      self._findIPAddress();
     }
   });
 };
 
-Server.prototype._findIPAddress = function(dht, callback, oldaddr, num, timeout) {
+Server.prototype._findIPAddress = function(oldaddr, num, timeout) {
   // FIXME: blacklist a contact from the list after too much failures
   // (don't remove it immediatly, if the problem is on our side we will loose
   // all our seeds)
   num = num || 0;
   timeout = timeout || 5000;
   var self = this;
-  var seeds = dht.getSeeds();
+  var seeds = this.dht.getSeeds();
   var retried = false;
   var seed;
-  var now = new Date();
+  var now = Date.now();
   
   while(seed === undefined) {
     if(seeds.length == 0) {
@@ -193,7 +202,7 @@ Server.prototype._findIPAddress = function(dht, callback, oldaddr, num, timeout)
 
     var lastContact = this.lastContact[seed.endpoint]
     
-    if(seed.id == dht.id || lastContact && now - lastContact < 60000) {
+    if(seed.id == this.dht.id || lastContact && now - lastContact < 60000) {
       // Exclude ourselves and don't spam
       seed = undefined;
       seeds.splice(k, 1);
@@ -215,71 +224,66 @@ Server.prototype._findIPAddress = function(dht, callback, oldaddr, num, timeout)
     }
     self.emit("public-address", myaddr.toString(), endpoint);
     self.myaddr = myaddr.toString();
-    if(oldaddr != myaddr) callback(myaddr.toString());
+    if(oldaddr != myaddr) self._publishCompleteStorage();
     if(!retried) setTimeout(keepAlive, 20000);
     
     function keepAlive(){
       retried = true;
-      return self._findIPAddress(dht, callback, myaddr, num+1);
+      return self._findIPAddress(myaddr, num+1);
     }
   });
   
   function tryAgain(){
     retried = true;
-    return self._findIPAddress(dht, callback, oldaddr, num+1, 500);
+    return self._findIPAddress(oldaddr, num+1, 500);
   }
 };
 
-Server.prototype._publishStorage = function(){
+Server.prototype._publishCompleteStorage = function(){
   console.log("Found self addr: " + this.myaddr);
   //console.log("Kad: Publish filelist");
   //console.log(this.storage.filelist);
   for(var fid in this.storage.filelist){
-    this._publishStorageItem(this.storage.filelist[fid], function(err) {
-      if(err) console.trace(err);
-    });
+    this._publishStorageItem(this.storage.filelist[fid], logerror);
   }
 };
 
 Server.prototype._publishStorageItem = function(f, cb){
-  var data = {
-    file_at: this.myaddr,
-    node_id: this.dht.id.toString(),
-  };
-  if(f.site) {
-    data.revision = f.site.revision;
-    var subdata = {
-      file_at:  this.myaddr,
-      node_id:  this.dht.id.toString(),
-      site_id:  f.id,
-      revision: f.site.revision
-    };
-    for(var i = 0; i < f.site.all_ids.length; i++) {
-      var subid = f.site.all_ids[i];
-      this.dht.multiset(kad.Id.fromHex(subid), this.dht.id.toString(), subdata, cb);
-    }
-  }
-  this.dht.multiset(kad.Id.fromHex(f.id), this.dht.id.toString(), data, cb);
+  if(f.site) this._publishSite(f.id, f.site.revision, f.site.all_ids, cb);
+  else       this._publishResource(f.id, cb);
 };
 
-Server.prototype._refreshSites_ = function(sitelist, defaultRefresh){
-  defaultRefresh = defaultRefresh || 1000 * 60 * 60; // 1 hour
-  var now = new Date();
-  var minNextRefresh = now + defaultRefresh;
-  for(var fid in sitelist) {
-    var site = sitelist[fid];
-    var refresh = site.metadata.refreshInterval || defaultRefresh;
-    var lastRefresh = site.lastRefresh;
-    var nextRefresh;
-    if(!lastRefresh || lastRefresh + refresh < now) {
-      nextRefresh = now + refresh;
-      this.storage.refreshSite(site);
-    } else {
-      nextRefresh = lastRefresh + refresh;
-    }
-    if(nextRefresh < minNextRefresh) minNextRefresh = nextRefresh;
+Server.prototype._publishSite = function(siteid, revision, all_ids, cb){
+  for(var i = 0; i < all_ids.length; i++) {
+    this._publishResource(all_ids[i], {revision: revision, site_id: siteid});
   }
-  return minNextRefresh - new Date();
+  this._publishResource(siteid, {revision: revision});
+  
+  // In this function we want to find all other nodes that have this
+  // site at a lower revision and notify them.
+  var self = this;
+  this.dht.getall(kad.Id.fromHex(blobid), function(err, data){
+    if(err) return console.log(err);
+    if(!data) return;
+    
+    for(var nodeid in data) {
+      var d = data[nodeid];
+      if(!d.file_at) continue;
+      if(!d.revision) continue;
+      if(d.revision >= revision) continue;
+      self.rpc.notifyNewRevision(d.file_at, siteid, revision, all_ids, logerror);
+    }
+  });
+};
+
+Server.prototype._publishResource = function(blobid, data, cb){
+  if(typeof data == "function") {
+    cb = data;
+    data = {};
+  }
+  data.file_at = this.myaddr,
+  data.node_id = this.dht.id.toString(),
+  this.dht.multiset(kad.Id.fromHex(blobid), this.dht.id.toString(), data, cb);
 };
 
 Server.prototype.getSite = function(dht, rpc, fid, cb) {
@@ -325,5 +329,63 @@ Server.prototype.putObjectBuffered = function(fid, headers, data, cb) {
 
 Server.prototype.putObject = function(fid, headers, stream, cb) {
   this.storage.putObject(fid, headers, stream, cb);
+};
+
+Server.prototype._refreshSites_ = function(sitelist, defaultRefresh){
+  defaultRefresh = defaultRefresh || 1000 * 60 * 60; // 1 hour
+  var now = Date.now();
+  var minNextRefresh = now + defaultRefresh;
+  for(var fid in sitelist) {
+    var site = sitelist[fid];
+    var refresh = site.metadata.refreshInterval || defaultRefresh;
+    var lastRefresh = site.lastRefresh;
+    var nextRefresh;
+    if(!lastRefresh || lastRefresh + refresh < now) {
+      nextRefresh = now + refresh;
+      this._refreshSite(site.id, site.revision);
+    } else {
+      nextRefresh = lastRefresh + refresh;
+    }
+    if(nextRefresh < minNextRefresh) minNextRefresh = nextRefresh;
+  }
+  return minNextRefresh - Date.now();
+};
+
+Storage.prototype._refreshSite = function(siteid, siterev) {
+  var self = this;
+  dht.getall(kad.Id.fromHex(siteid), function(err, data){
+    if(err) return console.error("Refresh site " + siteid + " error: " + err);
+    if(!data) return console.log("Refresh site " + siteid + ": no data");
+    console.log("Refresh site " + siteid + ": network responded " + JSON.stringify(data));
+
+    var max_rev_available = siterev + 1;
+    var source_addresses = [];
+    for(var k in data) {
+      var d = data[k];
+      if(!d.file_at || !d.revision || d.revision < max_rev_available) continue;
+      if(d.revision > max_rev_available) {
+        max_rev_available = d.revision;
+        source_addresses = [];
+      }
+      source_addresses.push(d.file_at);
+    }
+    
+    var source = random.value(source_addresses);
+    console.log("Refresh site " + siteid + ": Choose " + source + " in " + JSON.stringify(source_addresses));
+    
+    self._refreshSiteFromSource(siteid, source, function(err){
+      // FIXME: on error, try another source
+    });
+  });
+};
+
+Storage.prototype._refreshSiteFromSource = function(siteid, source, callback) {
+  var self = this;
+  this.rpc.getObjectStream(source, siteid, function(err, stream, meta){
+    if(err) return console.error("Refresh site " + siteid + " error contacting " + source + ": " + err);
+    console.log("Refresh site " + siteid + ": " + source + " responded with a data stream");
+
+    self.putObject(fid, meta.headers, stream, callback);
+  });
 };
 

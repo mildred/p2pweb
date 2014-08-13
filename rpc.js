@@ -25,6 +25,7 @@ RPC._debugs = function(msg){
 util.inherits(RPC, events.EventEmitter);
 
 RPC.prototype._getObject = function(fid, cb) {
+  // FIXME: use event
   cb(Error("RPC._getObject not implemented"));
 };
 
@@ -98,7 +99,7 @@ RPC.prototype.setUTP = function(utpServer) {
         RPC._debugs("Send Response: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(response.ok));
         return reply(response);
       }
-        
+
       if(requestObj.request == 'object') {
         RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.fid + ".");
         self._getObject(requestObj.fid, function(buf){
@@ -107,6 +108,11 @@ RPC.prototype.setUTP = function(utpServer) {
           reply(buf);
         });
         return;
+      }
+        
+      if(requestObj.request == 'newRevision') {
+        self.emit('new-revision', endpoint, requestObj.id, requestObj.rev, requestObj.revList);
+        return reply({ok: "thank you"});
       }
 
       if(requestObj.request == 'publicURL') {
@@ -296,6 +302,10 @@ RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
       return cb(meta.error, stream, meta.ok);
     }
   });
+};
+
+RPC.prototype.notifyNewRevision = function(endpoint, siteid, revision, revisionList, cb){
+  return this.request(endpoint, {request: "newRevision", id: siteid, rev: revision, revList: revisionList}, cb);
 };
 
 RPC.prototype.ping = function(addr, data, cb) { return this._sendKad('ping', addr, data, cb); };
