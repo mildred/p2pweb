@@ -294,9 +294,9 @@ Server.prototype._publishResource = function(blobid, data, cb){
 
 Server.prototype.getSite = function(fid, cb) {
   this.getObjectBuffered(fid, function(err, data, metadata){
-    var mh = new MetaHeaders(metadata.headers);
     var h;
     if(data) {
+      var mh = new MetaHeaders(metadata.headers);
       h = new SignedHeader(mh, hash.make(mh), verifysign);
       h.parseText(data.toString(), fid);
     }
