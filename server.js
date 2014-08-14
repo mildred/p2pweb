@@ -264,15 +264,18 @@ Server.prototype._publishSite = function(siteid, revision, all_ids, cb){
   // In this function we want to find all other nodes that have this
   // site at a lower revision and notify them.
   var self = this;
+  console.log("Replicate " + siteid + ": look at nodes that have it.");
   this.dht.getall(kad.Id.fromHex(siteid), function(err, data){
     if(err) return console.log(err);
-    if(!data) return;
+    if(!data) return console.log("No other node have " + siteid + ". Don't replicate.");
     
+    console.log("Replicate " + siteid + " revision " + revision + " to at most " + Object.keys(data).length + " nodes");
     for(var nodeid in data) {
       var d = data[nodeid];
       if(!d.file_at) continue;
-      if(!d.revision) continue;
-      if(d.revision >= revision) continue;
+      if(typeof d.revision != 'number') continue;
+      if(d.revision > revision) continue;
+      console.log("Replicate " + siteid + " to: " + nodeid + " " + d.file_at);
       self.rpc.notifyNewRevision(d.file_at, siteid, revision, all_ids, logerror);
     }
   });
@@ -385,9 +388,10 @@ Server.prototype._refreshSiteFromSource = function(siteid, source, callback) {
   var self = this;
   this.rpc.getObjectStream(source, siteid, function(err, stream, meta){
     if(err) return console.error("Refresh site " + siteid + " error contacting " + source + ": " + err);
+    if(!stream) return console.error("Refresh site " + siteid + " error: no data");
     console.log("Refresh site " + siteid + ": " + source + " responded with a data stream");
 
-    self.putObject(fid, meta.headers, stream, callback);
+    self.putObject(siteid, meta.headers, stream, callback);
   });
 };
 

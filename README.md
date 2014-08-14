@@ -129,6 +129,16 @@ TODO
   browser)
 - `[ ]` don't add .meta files of the data directory to the storage
 - `[ ]` when computing dependencies, files from old revisions are not included (SignedHeader.getFileList)
+- `[ ]` show for a site the nodes that replicates it and the revision they have
+- `[ ]` unresponding contacts should be removed from contact list and not used any more except in case of absolute necessity (no other node at all).
+- `[ ]` when refreshing a site, refresh all related resources
+- `[ ]` save nodes as seeds for next time
+- `[ ]` save the node id and port number for next time
+- `[ ]` when saving a revision, revision list is not updated in ui
+- `[ ]` add command line / environment variable options to enable some debug traces when necessary
+    - don't need to debug the RPC all the time
+    - debug RPC client and RPC server separately
+    - have a few verbose levels
 
 Roadmap
 -------
@@ -141,7 +151,7 @@ Roadmap
     - part of a website (tell which), information is in the website
     - viewed recently (when), it will be in a separate cache directory and use atime / mtime
     - it is a website the user created / decided to keep
-- `[.]` implement website auto download for websites we created / want to keep. Try to
+- `[x]` implement website auto download for websites we created / want to keep. Try to
   have this working in almost real time. Implement notification system.
 - `[.]` put p2pweb in a docker container and put an instance on the web
 - `[ ]` create a website, update it locally, and check it is uploaded to the server

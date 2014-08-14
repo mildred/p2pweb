@@ -187,6 +187,7 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
   var self = this;
   var filename = path.join(this.datadir, fid);
   var filename_meta = filename + ".meta";
+  var filename_head = filename + ".head";
   var is_p2pws = isp2pws(headers);
   tmp.tmpName({dir: this.datadir}, function(err, filename_temp){
     var fh = fs.createWriteStream(filename_temp);
@@ -197,12 +198,14 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
     if(err) {
       err.statusCode = 500;
       err.statusMessage = "Internal Error";
+      console.error("putObject " + fid + ": " + err.toString());
       return callback(err);
     }
     
     fh.on('error', function(e){
       e.statusCode = 500;
       e.statusMessage = "Internal Error";
+      console.error("putObject " + fid + ": " + e.toString());
       callback(e);
       stop = true;
     });
@@ -210,6 +213,7 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
     stream.on('error', function(e){
       e.statusCode = 500;
       e.statusMessage = "Internal Error";
+      console.error("putObject " + fid + ": " + e.toString());
       callback(e);
       stop = true;
     });
@@ -240,9 +244,10 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
 
       if(real_fid != fid) {
         fs.unlink(filename_temp, logerror);
-        var e = new Error("Incorrect Identifier, expected " + real_fid + " instead of " + fid + (is_p2pws ? " (first side id)" : ""));
+        var e = new Error("Incorrect Identifier, expected " + real_fid + " instead of " + fid + (is_p2pws ? " (first site id)" : ""));
         e.statusCode = 400;
         e.statusMessage = "Bad Request";
+        console.error("putObject " + fid + ": " + e.toString());
         console.error(e);
         return callback(e);
       }
@@ -259,28 +264,34 @@ Storage.prototype.putObject = function(fid, headers, stream, callback) {
         }
         
         if(would_loose.length > 0) {
-          var e = new Error("400 Bad Request: P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
+          var e = new Error("P2P Website not up to date, would loose versions:\n" + would_loose.join("\n"));
           e.httpStatus = 400;
           e.statusMessage = "Bad Request";
-          console.error(e);
+          console.error("putObject " + fid + ": " + e.toString());
           return callback(e);
         }
       }
       
       fs.rename(filename_temp, filename, function(e) {
         if(e) {
-          var e = new Error("500 Internal Error: Could not rename " + e);
+          var e = new Error("Could not rename " + e);
           e.httpStatus = 500;
           e.statusMessage = "Internal Error";
-          console.error(e);
+          console.error("putObject " + fid + ": " + e.toString());
           return callback(e);
         }
         var metadata = {
           headers: headers
         };
+        if(is_p2pws) {
+          console.log("putObject " + fid + ": got revision " + h.getLastSection() + " with: " + all_signed_ids.join(", "));
+        } else {
+          console.log("putObject " + fid + ": success");
+        }
         self.register_file(fid, filename, metadata, h);
         callback(null, fid);
         fs.writeFile(filename_meta, JSON.stringify(metadata), logerror);
+        fs.writeFile(filename_head, mh.toString(), logerror);
       });
     });
   });  

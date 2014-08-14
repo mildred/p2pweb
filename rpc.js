@@ -285,6 +285,10 @@ RPC.prototype.getPublicURL = function(endpoint, timeout, cb) {
 };
 
 RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
+  if(typeof timeout == 'function') {
+    cb = timeout;
+    timeout = undefined;
+  }
   return this.requestStream(endpoint, {request: "object", fid: fid}, timeout, function(err, stream){
     if(err) return cb(err.error);
     
@@ -293,7 +297,6 @@ RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
     function ReadHeaderSize(){
       var size = stream.read(4);
       if(!size) return stream.once('readable', ReadHeaderSize);
-      console.log(size.length);
       if(size.length > 4) stream.unshift(size.slice(4));
       return ReadHeader(size.readInt32BE(0));
     }
