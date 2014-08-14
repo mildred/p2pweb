@@ -19,7 +19,7 @@ RPC._debugc = function(msg){
 }
 
 RPC._debugs = function(msg){
-  //console.log("RPC: " + msg);
+  console.log("RPC: " + msg);
 }
 
 util.inherits(RPC, events.EventEmitter);
