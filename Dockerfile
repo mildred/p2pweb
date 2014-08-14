@@ -10,7 +10,7 @@ RUN mkdir -p /var/lib/p2pweb/data
 RUN mkdir -p /var/cache/p2pweb
 
 # replace this with your application's default port
-EXPOSE 8888
+EXPOSE 8888/tcp 8888/udp
 
 VOLUME /var/lib/p2pweb
 VOLUME /var/cache/p2pweb
