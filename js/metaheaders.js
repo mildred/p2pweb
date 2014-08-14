@@ -55,12 +55,9 @@ MetaHeaders.prototype.fromHeaders = function(h){
     json = JSON.parse(signed_headers_json) || {};
   } catch(e) {}
 
-  console.log(json);
   var headers = (signed_headers || "").split(/\s+/).filter(function(x){ return x.length > 0; });
   for(var i = 0; i < headers.length; ++i) {
     var headerval = json[headers[i]] || ((typeof h == 'function') ? h(headers[i]) : h[headers[i]]);
-    console.log(h + ": " + json[headers[i]]);
-    console.log(h + ": " + headerval);
     this.headers.push({
       name: headers[i].toLowerCase(),
       value: headerval || ""
@@ -97,7 +94,6 @@ MetaHeaders.prototype.toHeaders = function(h){
     var header = this.headers[i]
     signed_headers.push(header.name);
     h[header.name] = header.value;
-    console.log(header.name + ": " + header.value);
   }
   var json = JSON.stringify(h);
   h["x-p2pws-signed-headers"] = signed_headers.join(' ');
