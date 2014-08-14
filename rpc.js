@@ -296,6 +296,7 @@ RPC.prototype.getObjectStream = function(endpoint, fid, timeout, cb) {
     function ReadHeaderSize(){
       var size = stream.read(4);
       if(!size) return stream.once('readable', ReadHeaderSize);
+      if(size.length < 4) throw new Error("Internal Error " + size.toString());
       if(size.length > 4) stream.unshift(size.slice(4));
       return ReadHeader(size.readInt32BE(0));
     }

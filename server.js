@@ -39,7 +39,7 @@ function Server(){
   });
   
   this.rpc.on('new-revision', function(sourceAddr, siteid, revision, revisionList){
-    self._refreshSiteFromSource(siteid, sourceAddr, logerror);
+    self._refreshSiteFromSources(siteid, [sourceAddr]);
   });
 }
 
@@ -376,23 +376,50 @@ Server.prototype._refreshSite = function(siteid, siterev) {
       source_addresses.push(d.file_at);
     }
     
-    var source = random.value(source_addresses);
-    console.log("Refresh site " + siteid + ": Choose " + source + " in " + JSON.stringify(source_addresses));
-    
-    self._refreshSiteFromSource(siteid, source, function(err){
-      // FIXME: on error, try another source
-    });
+    random.shuffle(source_addresses);
+    self._refreshSiteFromSources(siteid, source_addresses);
   });
 };
 
-Server.prototype._refreshSiteFromSource = function(siteid, source, callback) {
+Server.prototype._refreshSiteFromSources = function(siteid, source_addresses) {
   var self = this;
-  this.rpc.getObjectStream(source, siteid, function(err, stream, meta){
-    if(err) return console.error("Refresh site " + siteid + " error contacting " + source + ": " + err);
-    if(!stream) return console.error("Refresh site " + siteid + " error: no data");
-    console.log("Refresh site " + siteid + ": " + source + " responded with a data stream");
-
-    self.putObject(siteid, meta.headers, stream, callback);
+  this._refreshResourceFromSources(siteid, source_addresses, logerror);
+  
+  this.getSite(siteid, function(err, h, metadata){
+    var ids = h.getAllResourceIds();
+    for(var i = 0; i < ids.length; i++){
+      var id = ids[i];
+      self._refreshResourceFromSources(id, source_addresses, logerror);
+    }
   });
+}
+
+Server.prototype._refreshResourceFromSources = function(siteid, source_addresses, callback) {
+  var i = 0;
+  var self = this;
+  refresh();
+
+  function refresh(){
+    if(i >= source_addresses.length) {
+      console.log("Refresh resource " + siteid + ": could not find a source node.");
+      callback(new Error("could not find a source node"));
+      return;
+    }
+    var source = source_addresses[i];
+    i++;
+    console.log("Refresh resource " + siteid + ": Choose " + source + " in " + source_addresses.length + " nodes");
+    
+    self.rpc.getObjectStream(source, siteid, function(err, stream, meta){
+      if(!err && stream) {
+        console.log("Refresh resource " + siteid + ": " + source + " responded with a data stream");
+        self.putObject(siteid, meta.headers, stream, callback);
+      } else {
+        if(err) return console.error("Refresh resource " + siteid + " error contacting " + source + ": " + err);
+        if(!stream) return console.error("Refresh resource " + siteid + " error: no data");
+        if(i < source_addresses.length) return refresh();
+        else return callback(err || new Error("No data provided"));
+      }
+    });
+  }
 };
 

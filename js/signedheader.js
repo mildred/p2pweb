@@ -356,6 +356,20 @@ SignedHeader.prototype.getFileList = function(version) {
   return list;
 };
 
+SignedHeader.prototype.getAllResourceIds = function() {
+  var ids = {};
+  for(var i = 0; i < this.headers.length; i++) {
+    var h = this.headers[i];
+    if(h.name == "Files" || h.name == "Files-Merge") {
+      var files = JSON.parse(h.value); // FIXME: handle errors here and everywhere
+      for(path in files) {
+        ids[files[path].id] = true;
+      }
+    }
+  }
+  return Object.keys(ids);
+};
+
 SignedHeader.prototype.toString = function() {
   return this.text;
 };

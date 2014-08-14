@@ -133,7 +133,10 @@ TODO
 - `[ ]` show for a site the nodes that replicates it and the revision they have
 - `[.]` unresponding contacts should be removed from contact list and not used
   any more except in case of absolute necessity (no other node at all).
-- `[ ]` when refreshing a site, refresh all related resources
+- `[ ]` after some time dead, a contact should be removed from the contact list.
+  Remove a contact if it has been dead more than it has been alive, and we are
+  not offline ourselves (we have other contacts responding).
+- `[x]` when refreshing a site, refresh all related resources
 - `[ ]` save nodes as seeds for next time
 - `[ ]` save the node id and port number for next time
 - `[ ]` when saving a revision, revision list is not updated in ui
@@ -144,6 +147,12 @@ TODO
     - have a few verbose levels
 - `[ ]` kademlia: during a lookup, if all contacts closest to the key are dead,
   make sure we retry with non dead contacts.
+- `[ ]` when getting an object from the network, for whatever reason, sore it in
+  cache (~/.cache for the desktop client) or in the data directory directly
+  (~/.local/share) in case the object was wanted.
+- `[ ]` split large files in chunks to speed up download and download them from
+  multiple clients
+- `[ ]` every hour, check updates for all sites we manage.
 
 Roadmap
 -------

@@ -84,9 +84,9 @@ Storage.prototype.register_file = function(fid, path, metadata, h){
       revision:   h.getLastSignedSection()
     };
 
-    var fileList = h.getFileList();
-    for(filePath in fileList) {
-      this._register_dependency(fileList[filePath].id, fid, "site-item");
+    var fileList = h.getAllResourceIds();
+    for(var i = 0; i < fileList.length; ++i) {
+      this._register_dependency(fileList[i], fid, "site-item");
     }
   } else {
     all_signed_ids = [fid];
@@ -181,6 +181,8 @@ Storage.prototype._addfile = function(file) {
   });
 };
 
+// callback(err, fid)
+//
 Storage.prototype.putObject = function(fid, headers, stream, callback) {
   // FIXME: atomic operation (incl metadata)
   var mh = new MetaHeaders(headers);
