@@ -218,6 +218,7 @@ Server.prototype._findIPAddress = function(oldaddr, num, timeout) {
   
   this.rpc.getPublicURL(endpoint, function(err, myaddr){
     clearTimeout(retry);
+    seed.setAlive(!err);
     if(err) {
       if(!retried) setTimeout(tryAgain, 500);
       return;
@@ -291,7 +292,7 @@ Server.prototype._publishResource = function(blobid, data, cb){
   this.dht.multiset(kad.Id.fromHex(blobid), this.dht.id.toString(), data, cb);
 };
 
-Server.prototype.getSite = function(dht, rpc, fid, cb) {
+Server.prototype.getSite = function(fid, cb) {
   this.getObjectBuffered(fid, function(err, data, metadata){
     var mh = new MetaHeaders(metadata.headers);
     var h;

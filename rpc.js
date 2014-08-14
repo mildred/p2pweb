@@ -165,12 +165,13 @@ RPC._makeURL = function(address) {
   return address.protocol + "://" + host + port + path;
 };
 
-RPC.prototype._connect = function(endpoint, data, callback) {
+RPC.prototype._connect = function(endpoint, data, timeout, callback) {
   var self = this;
   var addr = RPC._parseAddress(endpoint);
   if(addr.protocol == "utp+p2pws") {
     var opts = {
-      data: data,
+      data:       data,
+      timeout:    timeout && timeout * 1000,
       objectMode: true
     };
     this._utpServer.connect(addr.port, addr.host, opts, function(err, conn) {
@@ -198,10 +199,7 @@ RPC.prototype.requestStream = function(endpoint, request, timeout, callback) {
     timeout = undefined;
   }
   
-  var timedOut = false;
-  var timeoutId;
-  if(timeout) timeoutId = setTimeout(onTimeOut, timeout * 1000);
-  
+  var self = this;
   var requestURL = endpoint + "/" + request.request;
   requestURL +=
     (request.request == "kademlia") ? ("/" + request.type) :
@@ -211,20 +209,21 @@ RPC.prototype.requestStream = function(endpoint, request, timeout, callback) {
   if(request.request != "publicURL")
     RPC._debugc("Send Request: " + requestURL + ": " + JSON.stringify(request.data));
   
-  this._connect(endpoint, JSON.stringify(request), function(err, utp, addr){
-    if(timeoutId) clearTimeout(timeoutId);
-    if(timedOut)  return;
+  this._connect(endpoint, JSON.stringify(request), timeout, function(err, utp, addr){
     if(err) {
       console.log("RPC: Could not connect to " + endpoint + ": " + err.toString());
       return callback(err);
     }
-    if(callback(null, utp, addr, requestURL) !== false) utp.end();
+    utp.once('connect', function(){
+      if(callback(null, utp, addr, requestURL) !== false) utp.end();
+    });
+    utp.once('timeout', function(){
+      var e = new Error('timeout');
+      e.timeout = true;
+      callback(e);
+      self.emit('timeout', endpoint);
+    });
   });
-  
-  function onTimeOut(){
-    timedOut = true;
-    callback(new Error('timeout'));
-  }
 }
 
 RPC.prototype.request = function(endpoint, request, timeout, callback) {

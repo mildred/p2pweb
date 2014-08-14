@@ -124,21 +124,26 @@ TODO
   (done, reported the error differently)
 - `[ ]` when failed to save a page, notify the user of the failure, and when
   returning to the text editor, make sure that the txt is not discarded.
-- `[?]` when opening a link outside the interface, open in a new window by default
-  (especially with node-webkit, either open in a new window or with the
+- `[?]` when opening a link outside the interface, open in a new window by
+  default (especially with node-webkit, either open in a new window or with the
   browser)
 - `[ ]` don't add .meta files of the data directory to the storage
-- `[ ]` when computing dependencies, files from old revisions are not included (SignedHeader.getFileList)
+- `[ ]` when computing dependencies, files from old revisions are not included
+  (SignedHeader.getFileList)
 - `[ ]` show for a site the nodes that replicates it and the revision they have
-- `[ ]` unresponding contacts should be removed from contact list and not used any more except in case of absolute necessity (no other node at all).
+- `[.]` unresponding contacts should be removed from contact list and not used
+  any more except in case of absolute necessity (no other node at all).
 - `[ ]` when refreshing a site, refresh all related resources
 - `[ ]` save nodes as seeds for next time
 - `[ ]` save the node id and port number for next time
 - `[ ]` when saving a revision, revision list is not updated in ui
-- `[ ]` add command line / environment variable options to enable some debug traces when necessary
+- `[ ]` add command line / environment variable options to enable some debug
+  traces when necessary
     - don't need to debug the RPC all the time
     - debug RPC client and RPC server separately
     - have a few verbose levels
+- `[ ]` kademlia: during a lookup, if all contacts closest to the key are dead,
+  make sure we retry with non dead contacts.
 
 Roadmap
 -------
