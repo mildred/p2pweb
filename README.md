@@ -169,6 +169,10 @@ Roadmap
   have this working in almost real time. Implement notification system.
 - `[.]` put p2pweb in a docker container and put an instance on the web
 - `[ ]` create a website, update it locally, and check it is uploaded to the server
+    - check it works outside of docker
+    - check the volume of data exchanged, it shouldn't be too much
+    - check for packet loops
+    - check it works inside of docker
 
 make it work on cjdns
 ---------------------

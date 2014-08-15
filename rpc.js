@@ -93,6 +93,8 @@ RPC.prototype.setUTP = function(utpServer) {
         return reply({error: "Request Parse Error: " + e.toString()});
       }
       
+      RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request);
+      
       if(requestObj.request == 'kademlia') {
         RPC._debugs("Receive Request: " + endpoint + "/" + requestObj.request + "/" + requestObj.type + ": " + JSON.stringify(requestObj.data));
         var response = {ok: self._handleKadMessage(requestObj.type, endpoint, requestObj.data)};
