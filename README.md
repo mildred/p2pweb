@@ -147,6 +147,8 @@ TODO
     - have a few verbose levels
 - `[ ]` kademlia: during a lookup, if all contacts closest to the key are dead,
   make sure we retry with non dead contacts.
+- `[ ]` public address finding: don't query an url more frequently than 20s
+  apart. Store the last time contacted for each url.
 - `[ ]` when getting an object from the network, for whatever reason, sore it in
   cache (~/.cache for the desktop client) or in the data directory directly
   (~/.local/share) in case the object was wanted.
@@ -173,6 +175,9 @@ Roadmap
     - check the volume of data exchanged, it shouldn't be too much
     - check for packet loops
     - check it works inside of docker
+- switch ove to bittorrent protocol with extensions. Use
+  http://www.rasterbar.com/products/libtorrent/
+- integrate with the browser as a SOCKS4A proxy (same as Tor onion)
 
 make it work on cjdns
 ---------------------
@@ -216,4 +221,31 @@ Messaging
 
 On a personal website, messages can be posted encrypted, and recipients should
 check regularly to see if there is a message available for decryption.
+
+Porting over to torrent network
+-------------------------------
+
+The server software would:
+
+- Accept [SOCKS4A](http://www.openssh.com/txt/socks4a.protocol)
+  ([SOCKS4](http://www.openssh.com/txt/socks4.protocol)) connections
+- Accept HTTP connection on top of SOCKS4A
+- Transform the domain name xxx.bitweb to a magnet link (xxx being the
+  info-hash)
+- Download as fast as possible the metadata and the requested file. Download
+  other files in background. make sure that the file being requested is
+  downloaded in sequential order.
+- If the torrent is already downloading, make sure that the file requested is
+  downloaded as fast as possible in sequential order.
+- Serve the downloaded file as it is being downloaded.
+
+This would make a good demo. Improvement includes extnsions to bittorrent:
+
+- store metadata with files (HTTP headers such as content type)
+- store a public key with the torrent and sign the torrent
+- either augment the torrent (if possible) or make a torrent reference a
+  previous torrent. This would make torrent revisions.
+- advertise torrent revisions on the DHT and download latest revision of a
+  torrent by default. Allow mode that download specific revision.
+- advertise metadata on DHT (backlinks).
 
